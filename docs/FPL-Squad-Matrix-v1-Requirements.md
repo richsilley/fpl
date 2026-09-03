@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.1
+**Version:** 1.4
 **Date:** 3 September 2026
 **Status:** Approved for build
 
@@ -43,6 +43,8 @@ The one deliberate exception is the Club Blocks view, which uses twenty club row
 
 ## 5. Data sources
 
+### 5.1 Upstream API
+
 All data comes from the undocumented public FPL API at `https://fantasy.premierleague.com/api/`. No API key, no cost, no rate limit published.
 
 | Endpoint | Provides |
@@ -53,13 +55,68 @@ All data comes from the undocumented public FPL API at `https://fantasy.premierl
 | `entry/{manager_id}/` | Manager summary including their leagues |
 | `leagues-classic/{league_id}/standings/` | Manager IDs of everyone in a league |
 
-### Known constraints
+### 5.2 Internal routes
+
+The app does not expose the FPL API directly. Each upstream endpoint is proxied by a server-side route, which is where caching, headers and error translation live.
+
+| Internal route | Upstream |
+|---|---|
+| `GET /api/bootstrap` | `bootstrap-static/` |
+| `GET /api/fixtures` | `fixtures/` |
+| `GET /api/picks/{id}?gw=` | `entry/{id}/event/{gw}/picks/` |
+| `GET /api/league/{id}?page=` | `leagues-classic/{id}/standings/` |
+
+### 5.3 Bootstrap projection
+
+**`/api/bootstrap` returns a projection, not a faithful proxy.**
+
+Two separate problems, with two separate fixes. They are easy to confuse.
+
+**Problem 1: mobile payload.** The full `bootstrap-static` response is roughly 2.3MB, far too large to send to a phone, which conflicts with section 8.5. **Fixed by the projection.** Trimming to the fields the views need reduces the response to roughly 300KB.
+
+**Problem 2: server-side caching.** Next.js's Data Cache rejects items over 2MB, and **the limit applies to the upstream response body, not to what the route returns.** Projecting the output therefore did nothing for caching on its own. **Fixed by changing the cached unit:** `bootstrap-static` is fetched with `cache: 'no-store'`, and the trimmed result is what gets cached.
+
+**Do not remove the caching wrapper on the grounds that the projection made it unnecessary.** It did not. The two fixes are independent and both are required.
+
+The views require roughly twenty of the hundred-odd fields per player. The route returns only those.
+
+**Retained from `elements`:**
+
+```
+id, web_name, first_name, second_name, team, element_type,
+now_cost, cost_change_event, cost_change_start,
+form, total_points, points_per_game, minutes,
+expected_goals, expected_assists, expected_goal_involvements,
+selected_by_percent, status, news, chance_of_playing_next_round
+```
+
+**Retained in full:** `teams`, `element_types`, `events`. These are small and the views depend on them.
+
+Any new view requiring a field outside this list must add it here first. The projection is invisible from reading the endpoint, so it must be documented rather than inferred.
+
+The alternative fix, a KV or Redis cache handler exempt from the size limit, was rejected because it carries a cost and section 8.4 sets the target at zero.
+
+### 5.3.1 Caching implementation note
+
+The projection is cached using `unstable_cache`, which is deprecated in Next.js 16 but retained deliberately. Its replacement, `use cache`, defaults to per-instance in-memory storage that does not survive Vercel's serverless runtime, and the durable variant `use cache: remote` requires a paid cache handler, which breaches section 8.4. `unstable_cache` continues to write to Vercel's Data Cache, which is free on all plans and persists across deployments.
+
+Revisit when `use cache` has a free durable path on Vercel. Until then this is the only option that satisfies both the cost and the durability requirement.
+
+**Coupling risk.** The upstream fetch uses `cache: 'no-store'` because the caching happens one layer up. If the `unstable_cache` wrapper is ever removed or bypassed, the route silently falls back to pulling 2.3MB from FPL on every single request with no caching at all. The failure is silent and will not surface in tests. These two settings must be changed together or not at all.
+
+**Why CDN caching alone is insufficient.** `/api/picks` calls `getBootstrap()` internally for deadline logic, and internal server-side calls do not traverse the CDN. Without a server-side cache, every picks request triggers a full upstream fetch, which league mode multiplies by up to 50.
+
+### 5.4 Known constraints
 
 1. **CORS.** The API sends no CORS headers. All calls must be made server-side. A browser cannot call it directly.
 2. **User agent.** The API returns 403 to requests that don't look like a browser. Set a browser user-agent header on all server calls.
-3. **Picks are private before the deadline.** `picks/` only returns data for gameweeks whose deadline has passed. Rival comparison is therefore always retrospective.
+3. **Picks are private before the deadline.** `picks/` only returns data for gameweeks whose deadline has passed. Rival comparison is therefore always retrospective. **FPL returns an identical 404 for a bad manager ID and for a pre-deadline gameweek.** Check the deadline before calling, and return a distinct 409 for the not-yet-available case, so users are not told to check an ID that is correct.
 4. **Prices are in tenths.** `now_cost: 75` means £7.5m.
 5. **Availability.** The API goes down around gameweek deadlines and through the June–July off-season. Response shapes occasionally change over the summer.
+6. **Maintenance pages return 200 with HTML.** A failing API can return a success status carrying an HTML body. Reject responses that are not valid JSON, or a maintenance page will be cached as though it were data.
+7. **Payload size.** `bootstrap-static` exceeds Next.js's 2MB Data Cache limit. See 5.3.
+8. **Do not use `multiplier` to split starters from bench.** Under Bench Boost every one of the fifteen picks has a multiplier of 1 or higher, so the usual `multiplier > 0` test returns fifteen starters and an empty bench. Use `pick.position` instead: 1 to 11 are the starting XI, 12 to 15 are the bench in order. This affects any view that distinguishes the XI from the bench.
+9. **Manager and team names are not in the picks payload.** They come from `entry/{id}/`, which is a separate call. Rank and points for a specific gameweek do come from picks, via `entry_history`.
 
 ## 6. Fixture Score
 
@@ -182,7 +239,9 @@ Columns: global ownership %, reference population ownership %, and the differenc
 ### 8.1 Architecture
 
 - Next.js deployed on Vercel
-- All FPL API calls made in server-side route handlers, never from the browser
+- **The browser must never call the FPL API directly.** This is the actual constraint, driven by CORS (see 5.4). Server Components and route handlers both satisfy it, since both run on the server
+- Server Components should call the data layer in `lib/fpl` directly. Calling the app's own `/api` routes from a Server Component adds a network hop for no benefit
+- The `/api` routes exist as the surface for client-side callers, and are where caching, headers and error translation live
 - No database in v1
 
 ### 8.2 State

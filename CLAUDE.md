@@ -26,6 +26,79 @@ projection.
 Caching: `bootstrap-static` 1h, `fixtures` 24h, a manager's `picks` rest of
 gameweek (immutable once deadline passes), league standings 1h.
 
+## API routes (built)
+
+`lib/fpl/` is the only place that talks to FPL; `app/api/*/route.ts` are thin
+wrappers over it. Cache durations live in `lib/fpl/config.ts`.
+
+| Route | Cache |
+|---|---|
+| `GET /api/bootstrap` | 1h |
+| `GET /api/fixtures` | 24h |
+| `GET /api/picks/{managerId}?gw=` | until next deadline; `gw` defaults to current |
+| `GET /api/league/{leagueId}?page=` | 1h; page 1 = top 50 |
+
+`getEntry()` (`entry/{id}/`) also exists in `lib/fpl/api.ts` with no route handler —
+nothing client-side needs it yet. It's the **only** source of manager name and
+team name; `picks/` has neither. §8.3 doesn't list it, so it's cached 1h.
+
+Errors return `{ error: { code, message } }` with `Cache-Control: no-store`.
+Codes: `bad_request` 400, `not_found` 404, `picks_not_yet_available` 409,
+`forbidden` 502, `unavailable`/`network` 503, `timeout` 504.
+
+Caching uses the **`fetch` Data Cache**, not `use cache`/`cacheComponents`.
+`use cache` is in-memory per instance and does not survive Vercel's serverless
+runtime, so it would not keep load off FPL's servers; making it durable needs
+`use cache: remote`, which costs money and breaks the zero-cost goal. Reasoning
+is written up in `lib/fpl/client.ts`.
+
+### /api/bootstrap is a projection, not a faithful proxy
+
+The other three routes return upstream data unchanged. This one does not.
+
+A Next.js cache entry is capped at **2MB** and the upstream payload serialises
+to ~2.31MB, so it was silently rejected and every request hit the FPL API.
+Trimming the response alone does not fix that (the cap applies to the upstream
+body), so the *projection* is the cached unit, via `unstable_cache` in
+`lib/fpl/api.ts` — the only free mechanism that persists across serverless
+instances and deploys. Result: 1.65MB → 298KB response, 341KB cache entry, 6x
+under the limit.
+
+`events`, `teams` and `element_types` pass through whole (~35KB). `elements` is
+cut from ~100 fields to these 20 (`lib/fpl/projection.ts`):
+
+```
+id, web_name, first_name, second_name, team, element_type,
+now_cost, cost_change_event, cost_change_start,
+form, total_points, points_per_game, minutes,
+expected_goals, expected_assists, expected_goal_involvements,
+selected_by_percent, status, news, chance_of_playing_next_round
+```
+
+**If a view needs a field that isn't listed, add it** to `FplElement` in
+`lib/fpl/types.ts`, to `projectElement`, and to this list. The projection picks
+fields explicitly, so TypeScript fails the build if the two drift apart.
+
+## Squad loading (built, §7.1)
+
+`app/page.tsx` is a Server Component reading `?id=`. `lib/fpl/squad.ts`
+`loadSquad(managerId)` returns `{ manager, startingXi, bench }` — **this is the
+fifteen-row set from §4 that every view adds columns to.** Build views around
+it rather than re-deriving picks.
+
+- The page calls `lib/fpl` **directly**, not its own `/api` routes. §8.1 says
+  "route handlers", but the real constraint is CORS (constraint 1) and this runs
+  server-side; an HTTP hop per render would buy nothing since both share a cache.
+- Starting XI vs bench comes from `pick.position` (1–11 / 12–15), **never
+  `multiplier`** — Bench Boost gives all fifteen a multiplier ≥ 1.
+- The manager ID form is a plain `<form method="get">`. No client JS, no
+  hydration; the browser writes §8.2's URL state itself.
+- Rank and points come from `picks.entry_history`, not the entry summary, so
+  they describe the gameweek on screen.
+- Prices: always render via `formatPrice()` in `lib/format.ts` (constraint 4).
+- Table wrapper is `overflow-x-auto` + `sticky left-0` first column — §8.5's
+  pattern, verified at 320px: page doesn't scroll, table does, column holds.
+
 ## The four views
 
 Rows are the 15 players except where noted.
