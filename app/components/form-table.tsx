@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import {
   MATRIX_HEADER_HEIGHT,
+  MATRIX_PLAYER_COLUMN,
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
 import { availabilityOf, type Availability } from '@/lib/fpl/availability'
@@ -43,7 +44,7 @@ import { formatPoints, formatPrice, formatPriceChange } from '@/lib/format'
  * three bar columns are wider, because there the space *is* the data: a bar
  * needs room to be read as a length rather than a stub.
  */
-const PLAYER_COLUMN = 'w-[8.5rem] min-w-[8.5rem] sm:w-40 sm:min-w-40'
+const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
 const PRICE_COLUMN = 'w-16 min-w-16'
 const TIGHT_COLUMN = 'w-12 min-w-12'
 const SEASON_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
@@ -261,7 +262,7 @@ function barScales(players: SquadPlayer[], gameweeksPlayed: number): BarScales {
     maxForm: Math.max(...players.map((p) => Number(p.form) || 0), 0),
     maxXgi: Math.max(
       ...players.map((p) => Number(p.expectedGoalInvolvements) || 0),
-      0,
+      0
     ),
     maxMinutes: Math.max(1, gameweeksPlayed * 90),
   }

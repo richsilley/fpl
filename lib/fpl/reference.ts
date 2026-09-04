@@ -3,11 +3,7 @@ import 'server-only'
 import { getBootstrap, getEntry, getLeagueStandings, getPicks } from './api'
 import { mapWithConcurrency } from './concurrency'
 import { FplApiError } from './errors'
-import {
-  fieldStanding,
-  parseOwnership,
-  type FieldStanding,
-} from './ownership'
+import { fieldStanding, parseOwnership, type FieldStanding } from './ownership'
 import type { SquadPlayer } from './squad'
 import type { FplEvent } from './types'
 
@@ -239,6 +235,51 @@ function countOwners(squads: { element: number }[][]): Map<number, number> {
 
 function percentOf(count: number, size: number): number {
   return size < 1 ? 0 : (count / size) * 100
+}
+
+/** One entry in the rival dropdown (section 7.4). */
+export type LeagueMember = {
+  /** Manager ID, which is what the `rival` parameter carries. */
+  id: number
+  /** The team, e.g. "Troy Story". */
+  teamName: string
+  /** The person, e.g. "Rich Silley". */
+  managerName: string
+  rank: number
+}
+
+/**
+ * The league's managers, for the rival dropdown.
+ *
+ * **This makes no API call of its own.** `getLeagueStandings` is the same
+ * cached request `leaguePopulation` makes, and the standings row already
+ * carries `entry`, `entry_name` and `player_name`, which is everything the
+ * dropdown shows. Picking a rival from a league you can already compare
+ * against therefore costs nothing beyond the one `picks/` call for them.
+ *
+ * Capped and ordered exactly like the population, so the dropdown offers the
+ * managers the league comparison actually covers and nobody else.
+ */
+export async function leagueMembers(
+  leagueId: number,
+  excludeManagerId: number
+): Promise<LeagueMember[]> {
+  const standings = await getLeagueStandings(leagueId, 1)
+
+  return (
+    standings.standings.results
+      .slice(0, LEAGUE_MANAGER_CAP)
+      .filter((entry) => entry.entry !== excludeManagerId)
+      .map((entry) => ({
+        id: entry.entry,
+        teamName: entry.entry_name,
+        managerName: entry.player_name,
+        rank: entry.rank,
+      }))
+      // The endpoint returns them ranked already, but the dropdown order is a
+      // stated requirement, so it is made explicit rather than inherited.
+      .sort((a, b) => a.rank - b.rank)
+  )
 }
 
 /** Resolves the gameweek and events the picks fan-out needs. */

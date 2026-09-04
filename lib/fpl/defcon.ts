@@ -51,7 +51,7 @@ export function defconThreshold(position: string): DefconThreshold {
  */
 export function defconRatio(
   perNinety: number,
-  threshold: DefconThreshold,
+  threshold: DefconThreshold
 ): number | null {
   if (threshold === null || threshold <= 0) {
     return null

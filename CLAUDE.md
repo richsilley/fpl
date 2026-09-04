@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.11; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.12; v1 feature complete).
 
 ## What this is
 
@@ -108,6 +108,16 @@ it rather than re-deriving picks.
 - Table wrapper is `overflow-x-auto` + `sticky left-0` first column — §8.5's
   pattern, verified at 320px: page doesn't scroll, table does, column holds.
 
+**All three fifteen-row tables share their geometry** via
+`app/components/table-metrics.ts`: header height, row height, frozen player
+column width, and the sticky offset for anything pinned beside it. Switching
+Fixtures → Form → Ownership must change the columns and *nothing else*; a
+one-pixel disagreement reads as the page reloading. The heights are exact
+pixels (`h-[57px]`/`h-[45px]`), not `h-14`/`h-11` — those round to 56/44 and
+leave the other tables a pixel short of Fixtures, whose two-line fixture chip
+sets the real height. Each table also needs the **trailing spacer column**, or
+`w-full` shares the surplus out among the real columns.
+
 ## URL state (§8.2) — read this before adding a control
 
 All params in `lib/fpl/params.ts`. **Every control is a link or a GET form, and
@@ -119,8 +129,10 @@ horizon control's GET form needs hidden `view`/`sort` inputs for the same
 reason. Invalid values fall back to defaults, never error.
 
 `view` is `fixtures` | `form` | `ownership` | `clubs`, default `fixtures`.
-`league`/`rival` pick the Ownership population and are mutually exclusive —
-the selector sets one and clears the other; both present resolves to `league`.
+`league`/`rival` pick the Ownership population and are **not** mutually
+exclusive: `rival` wins when both are set. Both together means "this rival,
+picked from this league" — the league stays so the rival dropdown survives
+being used. Entering a league ID does clear the rival.
 
 **Carry params a view doesn't use.** Form has no horizon and hides the control,
 but the param still rides through, so switching Form → Fixtures returns to the
@@ -135,12 +147,12 @@ load-bearing:
 |---|---|
 | `client.ts` | the single egress point: user-agent, timeout, cache config, error mapping |
 | `api.ts` | one function per endpoint + cache durations |
-| `projection.ts` | trims bootstrap to the 20 fields (§5.3) |
+| `projection.ts` | trims bootstrap to the 22 fields (§5.3) |
 | `squad.ts` | `loadSquad()` → the fifteen-row set |
 | `views.ts` | `loadMatrixData()` → what every view is built from |
 | `fixtures.ts` | fixture index + Fixture Score |
 | `clubs.ts` | Club Blocks rows + sorting |
-| `reference.ts` | Ownership populations + `compareOwnership()` |
+| `reference.ts` | Ownership populations, `compareOwnership()`, `leagueMembers()` |
 | `concurrency.ts` | the bounded fan-out for league mode |
 | `http.ts` | route-handler helpers |
 
@@ -148,7 +160,8 @@ load-bearing:
 |---|---|
 | `horizon.ts` | horizon parsing/clamping, score formatting |
 | `params.ts` | URL state, `buildHref` |
-| `ownership.ts` | bands + direction flag |
+| `ownership.ts` | bands, direction flag, strategy ordering of the bands |
+| `defcon.ts` | DefCon thresholds + bar ratio (§7.3) |
 | `availability.ts` | status-code mapping |
 | `lib/format.ts` | price, rank, points |
 
@@ -199,18 +212,29 @@ Rows are the 15 players except where noted.
    Summary column shows Fixture Score over the §7.6 horizon.
 2. **Form** — "who is playing well / at risk?" **Built, redesigned §7.3.1.**
    Columns in order: price, GW change, season change, pts, PPG, form, mins,
-   xGI. (No xG/xA, no Status/News columns — those were removed.)
+   xGI, DefCon. (No xG/xA, no Status/News columns — those were removed.)
 
-   **Only Form/Mins/xGI get width** (w-20); everything else is sized to its
-   content. The table sizes to content, not `w-full` — otherwise the surplus
+   **Only the bar columns get width** (w-20); everything else is sized to its
+   content, Season excepted — it's sized to fit its own header. The table is
+   `w-full` **plus a trailing spacer column**; without the spacer the surplus
    redistributes and quietly re-widens the slim columns.
 
-   **Data bars on exactly three columns**: Form and xGI scale to the squad max
+   **Data bars on four columns.** Form and xGI scale to the squad max
    (comparison); **Mins scales to gameweeks × 90** (reliability — a full bar
-   means every minute played, regardless of squad). Muted single tone, never a
-   red-green scale: 15 players in one squad is a narrow range. One hue per
-   column (sky/grey/violet) so they read as separate columns. **Anchored
-   left** — right-anchored, short bars hide behind their own number.
+   means every minute played, regardless of squad); **DefCon scales to the
+   player's positional threshold** (10 DEF, 12 MID/FWD), capped so clearing the
+   line fills the bar. Muted single tones, never a red-green scale: 15 players
+   in one squad is a narrow range. One hue per column (sky/grey/violet/cyan) so
+   they read as separate columns. **Anchored left** — right-anchored, short bars
+   hide behind their own number.
+
+   **DefCon is a proxy, not a prediction** — see `lib/fpl/defcon.ts`. It's a
+   threshold stat capped at two points, so a season average can't tell a player
+   who clears the line most weeks from one posting extremes in a few. A real hit
+   rate needs `element-summary/{id}/`, which is deferred.
+
+   Headers are centred except Player; data is centred except Player and the bar
+   columns, whose numbers stay right-aligned against the end of their own bar.
 
    Availability is a dot before the name + tinted row + optional news line, not
    columns. Mapping in `lib/fpl/availability.ts`; unknown codes fail to "out".
@@ -225,10 +249,18 @@ Rows are the 15 players except where noted.
    never asks which mode it's in. Only `ownershipOf` differs. **Add a fourth
    population by writing a loader, not by branching the function.**
 
-   Global mode shows ownership % + a band flag only — reference % and difference
-   would be a repeat of the global figure and a column of zeroes, so they only
-   appear in league/rival mode. Bands: Template ≥40, Popular 15–40, Low 5–15,
-   Differential <5.
+   **Six fixed columns in every mode**: Player, Global, League, Rival, Diff,
+   Flag. Modes fill only what they measure and **dash the rest** (global dashes
+   League/Rival/Diff; league dashes Rival; rival dashes League). Don't go back
+   to hiding columns per mode — the table then reflowed on every switch. A dash
+   means "not measured here", which is not the same as zero.
+   Bands: Template ≥40, Popular 15–40, Low 5–15, Differential <5.
+
+   **Rival dropdown** lists the selected league's managers (team — manager, by
+   league rank, you excluded). `leagueMembers()` reads the *same cached*
+   standings call the league population makes, so it costs no extra request.
+   Hidden in global mode. Manual rival ID field stays, for rivals outside your
+   leagues.
 
    **League mode is the app's only fan-out.** Top 50 by league rank, 8 `picks/`
    calls in flight (`PICKS_CONCURRENCY`) — a single call is >1s, so 50 in series
@@ -240,10 +272,18 @@ Rows are the 15 players except where noted.
    Rank is taken **within the compared group**, not the whole league — on a big
    league you may sit outside the top 50, and then there's no ahead/behind call.
 
-   **Never colour the bands good/bad.** Ahead of the field a differential is a
-   risk; behind, it's how you close the gap. Same player, opposite meaning — so
-   colour would be wrong for one reader and breaks §6.4's green-means-good rule.
-   Direction lives in one guidance line above the table, never per player
+   **Flag colour is strategy-relative, and reverses with the direction flag.**
+   Ahead of the field a differential is a risk; behind, it's how you close the
+   gap — same player, opposite meaning. So the colour is not fixed per band: the
+   *label* carries the band, the *colour* carries whether that band helps you
+   now. Ahead, best→worst is Template, Popular, Low, Differential; behind, the
+   exact reverse. Four steps, **two greens and two reds, no amber** — amber
+   would read as neutral and there is no neutral. `bandStrategyOrder()` /
+   `bandStrategyStep()` in `lib/fpl/ownership.ts`; `unknown` position → grey,
+   never a guess. The legend re-orders and re-colours to match. §6.4's
+   green-means-good rule holds, because green always means "helps you".
+
+   Direction still lives in one guidance line above the table, never per player
    (§7.4). Denominator is `total_players`; median split; null rank → unknown.
 4. **Club Blocks** — "who should I buy?" **Built.** The deliberate exception:
    rows are the **20 clubs**, not the 15 players. Fixture Score over the §7.6

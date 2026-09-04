@@ -28,10 +28,12 @@ import {
 import {
   compareOwnership,
   globalPopulation,
+  leagueMembers,
   leaguePopulation,
   LEAGUE_MANAGER_CAP,
   referenceContext,
   rivalPopulation,
+  type LeagueMember,
   type ReferenceMode,
   type ReferencePopulation,
 } from '@/lib/fpl/reference'
@@ -246,15 +248,35 @@ async function MatrixSection({
           />
         ) : view === 'ownership' ? (
           <>
-            <OwnershipModeSelector
-              managerId={managerId}
-              manager={data.squad.manager}
-              mode={ownershipMode}
-              leagueId={leagueId}
-              rivalId={rivalId}
-              horizon={data.horizon}
-              sort={sort}
-            />
+            {/* The rival dropdown needs the league's manager list, which is
+                one cached standings call. Its own boundary so the mode links
+                are on screen at once, and so a slow or failed standings fetch
+                costs the dropdown and nothing else. */}
+            <Suspense
+              key={`selector-${leagueId ?? 'none'}`}
+              fallback={
+                <OwnershipModeSelector
+                  managerId={managerId}
+                  manager={data.squad.manager}
+                  mode={ownershipMode}
+                  leagueId={leagueId}
+                  rivalId={rivalId}
+                  horizon={data.horizon}
+                  sort={sort}
+                  members={null}
+                />
+              }
+            >
+              <ModeSelectorSection
+                managerId={managerId}
+                manager={data.squad.manager}
+                mode={ownershipMode}
+                leagueId={leagueId}
+                rivalId={rivalId}
+                horizon={data.horizon}
+                sort={sort}
+              />
+            </Suspense>
             {/* The league population is one picks call per manager, up to
                 fifty, and a single call runs over a second. Streaming means
                 the squad header, tabs and selector are on screen immediately
@@ -283,6 +305,55 @@ async function MatrixSection({
         {usesHorizon(view) && <FixturesLegend />}
       </section>
     </div>
+  )
+}
+
+/**
+ * The population selector, with the selected league's managers loaded for the
+ * rival dropdown.
+ *
+ * Costs no extra request: `leagueMembers` reads the same cached standings call
+ * the league comparison makes. A failure here is not worth an error panel — the
+ * mode links and both ID forms still work — so it falls back to the selector
+ * without a dropdown.
+ */
+async function ModeSelectorSection({
+  managerId,
+  manager,
+  mode,
+  leagueId,
+  rivalId,
+  horizon,
+  sort,
+}: {
+  managerId: string
+  manager: Squad['manager']
+  mode: ReferenceMode
+  leagueId: number | null
+  rivalId: number | null
+  horizon: Horizon
+  sort: ClubSort
+}) {
+  let members: LeagueMember[] | null = null
+  if (leagueId !== null) {
+    try {
+      members = await leagueMembers(leagueId, manager.id)
+    } catch (error) {
+      console.error('[ownership] could not load league members', error)
+    }
+  }
+
+  return (
+    <OwnershipModeSelector
+      managerId={managerId}
+      manager={manager}
+      mode={mode}
+      leagueId={leagueId}
+      rivalId={rivalId}
+      horizon={horizon}
+      sort={sort}
+      members={members}
+    />
   )
 }
 

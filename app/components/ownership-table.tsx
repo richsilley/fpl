@@ -1,6 +1,15 @@
 import {
+  MATRIX_HEADER_HEIGHT,
+  MATRIX_PLAYER_COLUMN,
+  MATRIX_ROW_HEIGHT,
+} from '@/app/components/table-metrics'
+import {
+  bandStrategyOrder,
+  bandStrategyStep,
   ownershipBandOf,
   OWNERSHIP_BANDS,
+  type BandStrategyStep,
+  type FieldPosition,
   type OwnershipBandId,
 } from '@/lib/fpl/ownership'
 import type { OwnershipRow, ReferencePopulation } from '@/lib/fpl/reference'
@@ -14,39 +23,42 @@ import type { OwnershipRow, ReferencePopulation } from '@/lib/fpl/reference'
  * three populations. This renders them; it does not know how the population
  * was built, only how big it is and what it is called.
  *
- * ## Why the bands are not colour-coded good or bad
+ * ## The columns are fixed, not per mode
  *
- * A differential is not inherently good or bad. Section 7.4 is explicit: ahead
- * of the population it is a risk, behind it is the way to close the gap. The
- * same 4% player means opposite things to two managers, so shading it green or
- * red would be wrong for one of them, and would clash with section 6.4's rule
- * that green means good everywhere.
+ * Player, Global, League, Rival, Diff, Flag — always all six, in that order,
+ * whichever population is selected. Only the cells that the selected mode can
+ * fill carry a value; the rest are em dashes. Rendering three different column
+ * sets meant the table reflowed on every mode switch, which made comparing two
+ * populations a matter of re-finding the columns each time. A dash is also an
+ * honest answer: it says this mode does not measure that, which is different
+ * from measuring it as zero.
  *
- * The bands are therefore neutral descriptors, and the single line of guidance
- * above the table carries the direction. Section 7.4 asks for exactly that:
- * guidance "above the table, not as advice per player".
+ * ## The flag colour is relative to your position, not to the band
  *
- * The **difference** column is the exception, and only because its sign is not
- * a judgement: it says which way the population leans, not whether that is
- * good. It is rendered with weight rather than colour for the same reason.
+ * The label carries the band and never changes. The colour carries whether
+ * being in that band helps or hurts you *right now*, and reverses with the
+ * direction flag. Section 7.4: ahead of the population a differential is a
+ * risk and convergence protects the lead; behind, the reverse. So the same
+ * Template chip is the best thing on the table when you are ahead and the
+ * worst when you are behind.
+ *
+ * This is why the scale is diverging green-to-red with no amber in the middle:
+ * the split between helping and hurting is the whole message and has to be
+ * visible without reading a word. Two greens and two reds, never a gradient
+ * through neutral.
+ *
+ * With no rank to read against there is no direction, so the chips stay grey.
+ * Colouring them anyway would be inventing advice.
  */
 
-const PLAYER_COLUMN = 'w-[9.5rem] min-w-[9.5rem] sm:w-52 sm:min-w-52'
-const OWNERSHIP_COLUMN = 'min-w-[10rem]'
-/**
- * In a comparison mode the global column moves into the player cell below
- * `sm`. Four columns do not fit a phone, and the two that would scroll off are
- * the reference and the difference, which are the entire point of choosing a
- * league or a rival. The global figure is the one that can be read anywhere.
- */
-const GLOBAL_COLUMN_COMPARING = 'hidden sm:table-cell min-w-[10rem]'
-const NUMERIC_COLUMN = 'w-[5rem] min-w-[5rem] sm:w-24 sm:min-w-24'
-/**
- * Hidden below `sm`, where the chip rides in the player cell instead. As a
- * column it does not fit on a phone, and the flag is the point of the view, so
- * it must not be the thing that scrolls off.
- */
-const BAND_COLUMN = 'hidden sm:table-cell w-32 min-w-32'
+const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
+/** The one wide column: it carries a bar as well as a number. */
+const GLOBAL_COLUMN = 'w-40 min-w-40'
+const NUMERIC_COLUMN = 'w-20 min-w-20'
+const BAND_COLUMN = 'w-32 min-w-32'
+
+/** Player, Global, League, Rival, Diff, Flag, plus the trailing spacer. */
+const COLUMN_COUNT = 7
 
 export function OwnershipTable({
   rows,
@@ -57,13 +69,9 @@ export function OwnershipTable({
   reference: ReferencePopulation
   teamName: string
 }) {
-  // Global mode compares the population against itself, so the reference and
-  // difference columns would repeat the ownership figure and a column of
-  // zeroes. See 7.4.1.
-  const showComparison = reference.mode !== 'global'
   const startingXi = rows.filter((row) => row.player.squadPosition <= 11)
   const bench = rows.filter((row) => row.player.squadPosition > 11)
-  const columnCount = showComparison ? 5 : 3
+  const position = reference.standing.position
 
   return (
     <div className="space-y-4">
@@ -84,58 +92,62 @@ export function OwnershipTable({
       <div className="relative overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <caption className="sr-only">
-            {teamName}: how widely each of the fifteen players is owned
-            {showComparison
-              ? `, across all FPL managers and within ${reference.label}`
-              : ' across all FPL managers'}
-            .
+            {teamName}: how widely each of the fifteen players is owned, across
+            all FPL managers and within {reference.label}.
           </caption>
 
           <thead>
-            <tr>
-              <th
-                scope="col"
-                className={`sticky left-0 z-20 border-b border-r border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${PLAYER_COLUMN}`}
+            <tr className={MATRIX_HEADER_HEIGHT}>
+              <HeaderCell
+                className={`sticky left-0 z-20 border-r ${PLAYER_COLUMN}`}
+                align="left"
               >
                 Player
-              </th>
-              <th
-                scope="col"
+              </HeaderCell>
+              <HeaderCell
+                className={GLOBAL_COLUMN}
+                align="left"
                 title="Percentage of all FPL managers who own this player"
-                className={`border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${
-                  showComparison ? GLOBAL_COLUMN_COMPARING : OWNERSHIP_COLUMN
-                }`}
               >
-                {showComparison ? 'Global' : 'Owned by'}
-              </th>
-
-              {showComparison && (
-                <>
-                  <th
-                    scope="col"
-                    title={`Ownership within ${reference.label}`}
-                    className={`border-b border-l border-neutral-100 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 dark:border-neutral-800/70 dark:bg-neutral-800 dark:text-neutral-300 ${NUMERIC_COLUMN}`}
-                  >
-                    <span className="block max-w-full truncate">
-                      {reference.mode === 'rival' ? 'Rival' : 'League'}
-                    </span>
-                  </th>
-                  <th
-                    scope="col"
-                    title="Reference ownership minus global ownership"
-                    className={`border-b border-l border-neutral-100 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 dark:border-neutral-800/70 dark:bg-neutral-800 dark:text-neutral-300 ${NUMERIC_COLUMN}`}
-                  >
-                    Diff
-                  </th>
-                </>
-              )}
-
-              <th
-                scope="col"
-                className={`border-b border-l border-neutral-100 bg-neutral-50 px-3 py-2 text-left font-medium text-neutral-600 dark:border-neutral-800/70 dark:bg-neutral-800 dark:text-neutral-300 ${BAND_COLUMN}`}
+                Global
+              </HeaderCell>
+              <HeaderCell
+                className={NUMERIC_COLUMN}
+                title={
+                  reference.mode === 'league'
+                    ? `Ownership within ${reference.label}`
+                    : 'Ownership within the selected league. Select a league to fill this column'
+                }
               >
+                League
+              </HeaderCell>
+              <HeaderCell
+                className={NUMERIC_COLUMN}
+                title={
+                  reference.mode === 'rival'
+                    ? `Whether ${reference.label} owns this player`
+                    : 'Whether the selected rival owns this player. Select a rival to fill this column'
+                }
+              >
+                Rival
+              </HeaderCell>
+              <HeaderCell
+                className={NUMERIC_COLUMN}
+                title="Ownership in the selected population, minus global ownership"
+              >
+                Diff
+              </HeaderCell>
+              <HeaderCell className={BAND_COLUMN} align="left">
                 Flag
-              </th>
+              </HeaderCell>
+
+              {/* Absorbs the leftover width, as in Fixtures and Form, so the
+                  columns keep the widths set above instead of sharing out the
+                  surplus. */}
+              <th
+                aria-hidden
+                className="w-auto border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800"
+              />
             </tr>
           </thead>
 
@@ -145,14 +157,14 @@ export function OwnershipTable({
                 key={row.player.id}
                 row={row}
                 reference={reference}
-                showComparison={showComparison}
+                position={position}
               />
             ))}
 
             <tr>
               <th
                 scope="colgroup"
-                colSpan={columnCount}
+                colSpan={COLUMN_COUNT}
                 className="sticky left-0 border-y border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/70 dark:text-neutral-400"
               >
                 Bench
@@ -164,26 +176,50 @@ export function OwnershipTable({
                 key={row.player.id}
                 row={row}
                 reference={reference}
-                showComparison={showComparison}
+                position={position}
               />
             ))}
           </tbody>
         </table>
       </div>
 
-      <BandKey />
+      <BandKey position={position} />
     </div>
+  )
+}
+
+function HeaderCell({
+  children,
+  className,
+  align = 'center',
+  title,
+}: {
+  children: React.ReactNode
+  className: string
+  align?: 'left' | 'center'
+  title?: string
+}) {
+  return (
+    <th
+      scope="col"
+      title={title}
+      className={`border-b border-neutral-200 bg-neutral-50 px-3 py-2 font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${
+        align === 'left' ? 'text-left' : 'text-center'
+      } ${className}`}
+    >
+      {children}
+    </th>
   )
 }
 
 function PlayerRow({
   row,
   reference,
-  showComparison,
+  position,
 }: {
   row: OwnershipRow
   reference: ReferencePopulation
-  showComparison: boolean
+  position: FieldPosition
 }) {
   const band = ownershipBandOf(row.globalPercent)
   const isBench = row.player.squadPosition > 11
@@ -192,8 +228,11 @@ function PlayerRow({
     ? 'bg-neutral-50 dark:bg-neutral-900/60'
     : 'bg-white dark:bg-neutral-900'
 
+  const isLeague = reference.mode === 'league'
+  const isRival = reference.mode === 'rival'
+
   return (
-    <tr>
+    <tr className={MATRIX_ROW_HEIGHT}>
       <th
         scope="row"
         className={`sticky left-0 z-10 border-b border-r border-neutral-200 px-3 py-1.5 text-left font-normal dark:border-neutral-800 ${rowBackground} ${PLAYER_COLUMN}`}
@@ -206,59 +245,86 @@ function PlayerRow({
             {row.player.club}
           </span>
         </span>
-        <span className="mt-0.5 flex items-baseline gap-1.5 sm:hidden">
-          <BandChip id={band.id} label={band.label} />
-          {/* In a comparison mode the global column is hidden at this width,
-              so the figure rides here instead. */}
-          {showComparison && (
-            <span className="text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
-              {row.globalPercent.toFixed(1)}% global
-            </span>
-          )}
-        </span>
       </th>
 
       <td
-        className={`border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${
-          showComparison ? GLOBAL_COLUMN_COMPARING : OWNERSHIP_COLUMN
-        }`}
+        className={`border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${GLOBAL_COLUMN}`}
       >
         <OwnershipBar percent={row.globalPercent} />
       </td>
 
-      {showComparison && (
-        <>
-          <td
-            className={`border-b border-l border-neutral-100 px-2 py-1.5 text-right tabular-nums text-neutral-800 dark:border-neutral-800/70 dark:text-neutral-200 ${rowBackground} ${NUMERIC_COLUMN}`}
-          >
-            {/* A population of one reads better as a yes or no than as 0% or
-                100%. The calculation is unchanged; only the wording is. */}
-            {reference.mode === 'rival' ? (
-              row.referencePercent > 0 ? (
-                <span className="font-medium">Owns</span>
-              ) : (
-                <span className="text-neutral-400 dark:text-neutral-600">
-                  No
-                </span>
-              )
-            ) : (
-              `${row.referencePercent.toFixed(1)}%`
-            )}
-          </td>
-          <td
-            className={`border-b border-l border-neutral-100 px-2 py-1.5 text-right tabular-nums dark:border-neutral-800/70 ${rowBackground} ${NUMERIC_COLUMN}`}
-          >
-            <Difference value={row.difference} />
-          </td>
-        </>
-      )}
+      <DataCell background={rowBackground}>
+        {isLeague ? `${row.referencePercent.toFixed(1)}%` : <NotMeasured />}
+      </DataCell>
+
+      <DataCell background={rowBackground}>
+        {/* A population of one reads better as a yes or no than as 0% or 100%.
+            The calculation is unchanged; only the wording is. */}
+        {isRival ? (
+          row.referencePercent > 0 ? (
+            <span className="font-medium">Owns</span>
+          ) : (
+            <span className="text-neutral-400 dark:text-neutral-600">No</span>
+          )
+        ) : (
+          <NotMeasured />
+        )}
+      </DataCell>
+
+      <DataCell background={rowBackground}>
+        {/* Global mode compares the population against itself, so the
+            difference would be a column of zeroes rather than a measurement.
+            See 7.4.1. */}
+        {isLeague || isRival ? (
+          <Difference value={row.difference} />
+        ) : (
+          <NotMeasured />
+        )}
+      </DataCell>
 
       <td
         className={`border-b border-l border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${BAND_COLUMN}`}
       >
-        <BandChip id={band.id} label={band.label} />
+        <BandChip id={band.id} label={band.label} position={position} />
       </td>
+
+      {/* Matches the spacer in the header. */}
+      <td
+        aria-hidden
+        className={`w-auto border-b border-l border-neutral-100 dark:border-neutral-800/70 ${rowBackground}`}
+      />
     </tr>
+  )
+}
+
+function DataCell({
+  children,
+  background,
+}: {
+  children: React.ReactNode
+  background: string
+}) {
+  return (
+    <td
+      className={`border-b border-l border-neutral-100 px-2 py-1.5 text-center tabular-nums text-neutral-800 dark:border-neutral-800/70 dark:text-neutral-200 ${background} ${NUMERIC_COLUMN}`}
+    >
+      {children}
+    </td>
+  )
+}
+
+/**
+ * A column this mode does not measure.
+ *
+ * Deliberately not a zero: "no rival selected" and "the rival does not own
+ * them" are different answers and must not look alike.
+ */
+function NotMeasured() {
+  return (
+    <span className="text-neutral-300 dark:text-neutral-600">
+      <span aria-hidden>—</span>
+      <span className="sr-only">not measured in this mode</span>
+    </span>
   )
 }
 
@@ -266,7 +332,8 @@ function PlayerRow({
  * Reference minus global.
  *
  * Weight rather than colour: the sign says which way the population leans, and
- * whether leaning that way is good depends entirely on the direction flag.
+ * whether leaning that way is good depends entirely on the direction flag,
+ * which the Flag column already carries.
  */
 function Difference({ value }: { value: number }) {
   const rounded = Math.round(value * 10) / 10
@@ -312,22 +379,54 @@ function OwnershipBar({ percent }: { percent: number }) {
   )
 }
 
-const BAND_STYLE: Record<OwnershipBandId, string> = {
-  template:
-    'bg-neutral-800 text-neutral-50 dark:bg-neutral-200 dark:text-neutral-900',
-  popular:
-    'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
-  low: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
-  differential:
-    'border border-neutral-400 text-neutral-800 dark:border-neutral-500 dark:text-neutral-100',
+/**
+ * The four-step diverging scale.
+ *
+ * Two greens and two reds, no amber: an amber middle would read as "neutral",
+ * and there is no neutral here. Every band either helps or hurts the position
+ * you are in, and the step from `good` to `weak` is the line between the two.
+ * Keeping the pale pair adjacent makes that line the strongest edge in the
+ * column, which is what has to be legible without reading the labels.
+ */
+const STEP_STYLE: Record<BandStrategyStep, string> = {
+  best: 'bg-emerald-200 text-emerald-950 dark:bg-emerald-500/35 dark:text-emerald-50',
+  good: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  weak: 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
+  worst: 'bg-rose-200 text-rose-950 dark:bg-rose-500/35 dark:text-rose-50',
 }
 
-function BandChip({ id, label }: { id: OwnershipBandId; label: string }) {
+/** No direction to read against, so no claim about whether the band helps. */
+const NO_DIRECTION_STYLE =
+  'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
+
+const STEP_WORDING: Record<BandStrategyStep, string> = {
+  best: 'best for your position',
+  good: 'helps your position',
+  weak: 'works against your position',
+  worst: 'worst for your position',
+}
+
+function BandChip({
+  id,
+  label,
+  position,
+}: {
+  id: OwnershipBandId
+  label: string
+  position: FieldPosition
+}) {
+  const step = bandStrategyStep(id, position)
+
   return (
     <span
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${BAND_STYLE[id]}`}
+      className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${
+        step === null ? NO_DIRECTION_STYLE : STEP_STYLE[step]
+      }`}
     >
       {label}
+      {/* Colour alone would carry the entire helps-or-hurts message, so the
+          same thing is said in words for anyone who cannot read the hues. */}
+      {step !== null && <span className="sr-only">, {STEP_WORDING[step]}</span>}
     </span>
   )
 }
@@ -376,20 +475,27 @@ function describePopulation(reference: ReferencePopulation): string {
 /**
  * What the flags mean, once, below the table.
  *
- * These read the same for every player in a band, so as a column they were
- * fifteen rows repeating four sentences. Stated once here they are still
- * available to a first-time reader without crowding the table.
+ * Ordered best-first for the current position and coloured to match, so the
+ * key is a legend for the table as it stands rather than a fixed glossary. It
+ * re-orders when the direction flips, which is the clearest possible statement
+ * that the ordering is a consequence of where the manager sits and not a
+ * property of the bands.
  */
-function BandKey() {
+function BandKey({ position }: { position: FieldPosition }) {
+  const ordered = bandStrategyOrder(position)
+    .map((id) => OWNERSHIP_BANDS.find((band) => band.id === id))
+    .filter((band) => band !== undefined)
+
   return (
     <div className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
       <dl className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6">
-        {OWNERSHIP_BANDS.map((band, index) => {
+        {ordered.map((band) => {
+          const index = OWNERSHIP_BANDS.indexOf(band)
           const upper = index === 0 ? null : OWNERSHIP_BANDS[index - 1].min
           return (
             <div key={band.id} className="flex items-baseline gap-2">
               <dt className="shrink-0">
-                <BandChip id={band.id} label={band.label} />
+                <BandChip id={band.id} label={band.label} position={position} />
               </dt>
               <dd className="text-xs text-neutral-500 dark:text-neutral-400">
                 <span className="tabular-nums">
@@ -401,9 +507,27 @@ function BandKey() {
           )
         })}
       </dl>
-      <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
-        Bands read global ownership, so they mean the same thing whichever
-        population is selected.
+      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+        {position === 'unknown' ? (
+          <>
+            Bands read global ownership and mean the same thing whichever
+            population is selected. There is no rank to read you against, so
+            none of them is marked as helping or hurting.
+          </>
+        ) : (
+          <>
+            <span className="font-medium text-neutral-700 dark:text-neutral-200">
+              Green marks the bands that help your current position
+            </span>{' '}
+            and red the ones that work against it, best first. Because you are{' '}
+            {position === 'ahead' ? 'ahead of' : 'behind'} this population,{' '}
+            {position === 'ahead'
+              ? 'owning what the crowd owns protects your lead and differentials risk it'
+              : 'differentials are how you close the gap and matching the crowd preserves it'}
+            . The bands themselves read global ownership, so they mean the same
+            thing whichever population is selected.
+          </>
+        )}
       </p>
     </div>
   )

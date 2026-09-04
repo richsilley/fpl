@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.11
+**Version:** 1.12
 **Date:** 4 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -340,9 +340,30 @@ The comparison population is selectable:
 
 **This is one function with three inputs, not three features.** The calculation is identical; only the denominator changes.
 
-Columns: global ownership %, reference population ownership %, and the difference between them.
+**Columns are fixed across all three modes:** Player, Global, League, Rival, Diff, Flag, always in that order. Only the cells the selected mode can fill carry a value; the rest render an em dash. Global mode dashes League, Rival and Diff; league mode dashes Rival; rival mode dashes League.
+
+The reason is that the table must not reflow when the population changes. Three different column sets meant re-finding every column on each switch, which made comparing two populations harder than reading either one. A dash is also the honest answer: "this mode does not measure that" is a different statement from "this measures zero", and the two must not look alike.
+
+**Rival dropdown.** When a mini league is selected, offer that league's managers as a dropdown: team name with manager name, ordered by league rank, excluding the user themselves. Selecting one runs the rival comparison. **This costs no extra API call** — the standings response the league comparison already fetches carries `entry`, `player_name` and `entry_name` for every row. Hide the dropdown entirely in global mode, where there is no league to populate it from. Keep the manual rival manager ID field for rivals outside the user's leagues.
 
 **Direction flag.** The app derives whether the user is ahead of or behind the reference population, using their rank within it. Ahead means differentials are a risk and convergence protects the lead. Behind means the opposite. Display this as a single line of guidance above the table, not as advice per player.
+
+**The Flag column is coloured relative to that direction, on a diverging green-to-red scale.**
+
+The label carries the band and never changes. The colour carries whether being in that band helps or hurts the user's current position, and reverses when the direction does.
+
+| Position | Best → worst |
+|---|---|
+| Ahead | Template, Popular, Low, Differential |
+| Behind | Differential, Low, Popular, Template |
+
+Four steps applied to that ordering: green tint with dark green text, pale green with mid green, pale red with mid red, red tint with dark red. **Two greens and two reds, no amber.** An amber middle would read as neutral, and there is no neutral here: every band either helps or hurts. The split between helping and hurting must be legible without reading a single label, which is why the two pale steps sit adjacent — that boundary is the strongest edge in the column.
+
+The colour uses the same ahead-or-behind value as the guidance line, so the two can never disagree.
+
+The legend re-orders and re-colours with the table, and states plainly that green marks the bands helping the current position. Re-ordering is deliberate: it is the clearest possible statement that the ranking is a consequence of where the user sits, not a property of the bands.
+
+Where there is no rank to read the user against, there is no direction, and the chips stay grey. Colouring them anyway would be inventing advice.
 
 **League size cap: 50 managers.** A mini league requires one API call per manager. Fetch the top 50 by current league rank and no more. If the league is larger, show a notice stating that the comparison covers the top 50 only. Cache all fetched squads for the remainder of the gameweek.
 
@@ -350,7 +371,7 @@ Columns: global ownership %, reference population ownership %, and the differenc
 
 All three populations are built. `compareOwnership` is the one function section 7.4 asks for: it takes a population and returns a row per player, and never asks which mode it is in. The three loaders differ only in how they arrive at an ownership lookup and a rank, which is the "only the denominator changes" the section describes.
 
-**Global mode still shows two columns, not four.** The reference population *is* the global one, so reference ownership would repeat the global figure and the difference would always be zero. Rendering two dead columns would be worse than not rendering them. The comparison columns appear in league and rival modes, where they mean something.
+**Global mode dashes three of its six columns rather than hiding them.** The reference population *is* the global one, so a reference figure would repeat the global one and the difference would always be zero. An earlier build dropped those columns entirely; the table then changed shape on every mode switch, which cost more than the empty cells saved. Dashes say the same thing without moving anything.
 
 **Fetching cost and why the cap exists.** A single `picks/` call takes well over a second, so fifty in series would be well over a minute. They run eight at a time: fifty squads land in about six seconds cold, and under a second and a half once cached. Each manager's picks are cached for the rest of the gameweek by the same rule as the user's own (8.3), so that cost falls once per league per gameweek, not once per page view.
 
@@ -368,9 +389,13 @@ All three populations are built. `compareOwnership` is the one function section 
 
 **Flags, not raw percentages alone.** The question in 7.4 is comparative, so ownership is banded: Template at 40% and above, Popular 15 to 40, Low 5 to 15, Differential below 5. The percentage is still shown, with a bar scaled to 100 rather than to the highest value in the squad, so a player looks the same in every squad.
 
-**The bands must not be coloured good or bad.** This is the direction flag's whole point: ahead of the field a differential is a risk, behind it a differential is the way to close the gap. The same 4% player means opposite things to two managers, so shading it green or red is wrong for one of them and breaks 6.4's rule that green means good everywhere. The bands are neutral; the single guidance line carries the direction.
+**The bands are coloured by strategy, never by band.** Ahead of the field a differential is a risk; behind, it is the way to close the gap. The same 4% player means opposite things to two managers, so a fixed colour per band would be wrong for one of them. The resolution is not to leave the chips neutral but to make the colour follow the direction flag: the scale reverses with it, so green always means "this helps you" and 6.4's green-means-good rule holds in both states. The guidance line still carries the direction in words, and the legend repeats it.
 
-**The flag must survive a narrow screen.** As with availability in 7.3, the flag moves into the frozen player column below the `sm` breakpoint rather than scrolling out of view.
+**Colour is never the only carrier.** Each chip also states its step in screen-reader text, and the legend spells the ordering out, so the helps-or-hurts message survives greyscale and colour blindness.
+
+**`league` and `rival` are no longer mutually exclusive, and `rival` wins.** A rival picked from the dropdown keeps the league in the URL: `rival` is the population, `league` is the list the picker was built from. Clearing it on selection would make the dropdown vanish the moment it was used, leaving no way back to the league's other managers. Entering a *league* ID still clears the rival, because a rival from the old league has no place in a new one.
+
+**The table matches the other fifteen-row views.** Same frozen player column width and formatting, same header and row heights, same trailing spacer, all from shared constants, so switching between Fixtures, Form and Ownership changes the columns and nothing else. On a narrow screen the six columns scroll behind the frozen name column, exactly as the other two views do.
 
 **Direction flag denominator.** Global mode reads the manager's overall rank against `total_players` from `bootstrap-static`, which is why that field is retained in the projection in 5.3. The split is the median: ahead is the better half of the field. Before any rank is published the flag reads as unknown rather than guessing.
 
@@ -446,7 +471,7 @@ This makes every view shareable by construction and removes the need for account
 | `league` | League ID | None. Ownership falls back to global mode |
 | `rival` | Manager ID of a single rival | None. Ownership falls back to global mode |
 
-`league` and `rival` select the Ownership view's reference population, so they are mutually exclusive. The population selector always sets one and clears the other. A hand-edited URL carrying both resolves to `league`.
+`league` and `rival` select the Ownership view's reference population. They are **not** mutually exclusive: a URL carrying both means "compare against this rival, chosen from this league", and `rival` is the population. `league` alone is league mode. See 7.4 for why the league is kept.
 
 `?id=1234567` alone must land on the fixtures view at a 5-gameweek horizon. Nobody should need to type a `view` parameter to reach the main function of the app.
 

@@ -74,9 +74,13 @@ export function toErrorResponse(error: unknown): Response {
   const fplError =
     error instanceof FplApiError
       ? error
-      : new FplApiError('unavailable', 'Unexpected error talking to the FPL API', {
-          cause: error,
-        })
+      : new FplApiError(
+          'unavailable',
+          'Unexpected error talking to the FPL API',
+          {
+            cause: error,
+          }
+        )
 
   if (!(error instanceof FplApiError)) {
     console.error('[fpl] unexpected error', error)

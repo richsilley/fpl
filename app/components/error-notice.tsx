@@ -11,8 +11,7 @@ import type { FplErrorKind } from '@/lib/fpl/errors'
 const RECOVERY: Partial<Record<FplErrorKind, string>> = {
   not_found:
     'Check the ID. You can find yours on the FPL site: open the Points tab and take the number from the address bar.',
-  bad_request:
-    'A manager ID is a plain number, with no spaces or punctuation.',
+  bad_request: 'A manager ID is a plain number, with no spaces or punctuation.',
   picks_not_yet_available:
     'Squads stay private until the deadline passes, so this one cannot be loaded yet.',
   forbidden:

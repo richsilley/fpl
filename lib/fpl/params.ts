@@ -116,16 +116,21 @@ export function nextClubSort(
  * Section 8.2: `league` selects the mini-league population, and `rival` its
  * single-manager counterpart. Neither present means global mode.
  *
- * A URL carrying both is ambiguous, so `league` wins and `rival` is ignored.
- * The mode selector always sets one and clears the other, so this only ever
- * arises from a hand-edited URL.
+ * The two are **not** mutually exclusive, and `rival` wins when both are set.
+ * A rival is normally picked from a league's own manager list, so the pair
+ * reads as "compare me against this manager, chosen from this league": `rival`
+ * is the population, `league` is where the picker got its options. Dropping the
+ * league on selection would make the dropdown vanish the moment it was used.
+ *
+ * `league` alone is still league mode, so nothing about the league links
+ * changes; only a URL with both behaves differently from before.
  */
 export function ownershipModeOf(
   league: string | undefined,
   rival: string | undefined
 ): 'global' | 'league' | 'rival' {
-  if (league) return 'league'
   if (rival) return 'rival'
+  if (league) return 'league'
   return 'global'
 }
 
@@ -162,7 +167,8 @@ export type FormSortField =
 /** Squad order, the default: starting XI then bench, as section 7.1 loads it. */
 export const DEFAULT_FORM_SORT = 'squad' as const
 
-export type FormSort = 'squad' | `${Exclude<FormSortField, 'squad'>}-${'asc' | 'desc'}`
+export type FormSort =
+  'squad' | `${Exclude<FormSortField, 'squad'>}-${'asc' | 'desc'}`
 
 const SORTABLE_FORM_FIELDS: Exclude<FormSortField, 'squad'>[] = [
   'price',
@@ -204,7 +210,10 @@ export function splitFormSort(sort: FormSort): {
  * Numeric columns open descending, because "who has the most" is the question
  * being asked of every one of them, and clicking the active column reverses.
  */
-export function nextFormSort(field: FormSortField, current: FormSort): FormSort {
+export function nextFormSort(
+  field: FormSortField,
+  current: FormSort
+): FormSort {
   if (field === 'squad') {
     return 'squad'
   }

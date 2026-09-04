@@ -1,14 +1,13 @@
 /**
- * Ownership (section 7.4), global mode.
+ * Ownership (section 7.4): the bands, the direction flag, and how the two
+ * combine.
  *
  * Not `server-only`: pure arithmetic over numbers already fetched.
  *
  * Section 7.4 describes three comparison populations sharing one calculation,
- * "one function with three inputs, not three features". This is the first
- * input, the global one, where the reference population is every FPL manager
- * and the ownership figure comes straight from `selected_by_percent`. The
- * league and rival populations are build steps 7 and 8 and change only the
- * denominator, not anything here.
+ * "one function with three inputs, not three features". Nothing here knows
+ * which population it is looking at; `lib/fpl/reference.ts` builds those and
+ * only the denominator differs between them.
  */
 
 /**
@@ -51,7 +50,8 @@ export const OWNERSHIP_BANDS: OwnershipBand[] = [
     id: 'differential',
     label: 'Differential',
     min: 0,
-    description: 'Rarely owned. Moves you away from the field, in either direction',
+    description:
+      'Rarely owned. Moves you away from the field, in either direction',
   },
 ]
 
@@ -60,6 +60,54 @@ export function ownershipBandOf(percent: number): OwnershipBand {
     OWNERSHIP_BANDS.find((band) => percent >= band.min) ??
     OWNERSHIP_BANDS[OWNERSHIP_BANDS.length - 1]
   )
+}
+
+/**
+ * How well a band serves the manager's current position.
+ *
+ * The label says what the band *is*; this says what it is *worth to you*, and
+ * it is the only part that changes. Section 7.4: ahead of the population,
+ * differentials are a risk and convergence protects the lead; behind, the
+ * reverse. So the ordering flips entirely rather than shifting.
+ */
+export type BandStrategyStep = 'best' | 'good' | 'weak' | 'worst'
+
+const STRATEGY_STEPS: BandStrategyStep[] = ['best', 'good', 'weak', 'worst']
+
+/**
+ * The four bands from best to worst for the given position.
+ *
+ * Ahead: owning what the crowd owns is what protects a lead, so Template is
+ * best and a Differential is the biggest way to lose ground.
+ * Behind: the exact reverse, because matching the crowd only preserves a gap
+ * you need to close.
+ */
+export function bandStrategyOrder(position: FieldPosition): OwnershipBandId[] {
+  const ahead: OwnershipBandId[] = [
+    'template',
+    'popular',
+    'low',
+    'differential',
+  ]
+  return position === 'behind' ? [...ahead].reverse() : ahead
+}
+
+/**
+ * Where a band sits on that ordering.
+ *
+ * Null when there is no rank to read the manager against: with no direction
+ * there is no such thing as a helpful band, and colouring one anyway would be
+ * inventing advice. The label still stands on its own.
+ */
+export function bandStrategyStep(
+  id: OwnershipBandId,
+  position: FieldPosition
+): BandStrategyStep | null {
+  if (position === 'unknown') {
+    return null
+  }
+  const index = bandStrategyOrder(position).indexOf(id)
+  return index === -1 ? null : STRATEGY_STEPS[index]
 }
 
 /** `selected_by_percent` arrives as a string. Returns 0 for anything unparseable. */

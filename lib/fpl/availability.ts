@@ -56,7 +56,9 @@ export function availabilityOf(player: {
     return {
       level: 'doubtful',
       flag:
-        player.chanceOfPlaying === null ? 'Doubt' : `${player.chanceOfPlaying}%`,
+        player.chanceOfPlaying === null
+          ? 'Doubt'
+          : `${player.chanceOfPlaying}%`,
       label,
       chance: player.chanceOfPlaying,
     }

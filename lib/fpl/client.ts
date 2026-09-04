@@ -1,10 +1,6 @@
 import 'server-only'
 
-import {
-  BROWSER_USER_AGENT,
-  FPL_BASE_URL,
-  REQUEST_TIMEOUT_MS,
-} from './config'
+import { BROWSER_USER_AGENT, FPL_BASE_URL, REQUEST_TIMEOUT_MS } from './config'
 import { FplApiError } from './errors'
 
 /**
@@ -102,10 +98,14 @@ export async function fplFetch<T>(
   try {
     return (await response.json()) as T
   } catch (cause) {
-    throw new FplApiError('unavailable', 'The FPL API returned malformed JSON.', {
-      cause,
-      upstreamStatus: response.status,
-    })
+    throw new FplApiError(
+      'unavailable',
+      'The FPL API returned malformed JSON.',
+      {
+        cause,
+        upstreamStatus: response.status,
+      }
+    )
   }
 }
 

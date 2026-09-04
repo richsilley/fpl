@@ -1,6 +1,8 @@
 import { FixtureCell, ScoreBadge } from '@/app/components/fixture-visuals'
 import {
   MATRIX_HEADER_HEIGHT,
+  MATRIX_PLAYER_COLUMN,
+  MATRIX_PLAYER_COLUMN_END,
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
 import { fixtureScore, fixturesFor, horizonGameweeks } from '@/lib/fpl/fixtures'
@@ -19,7 +21,7 @@ import type { MatrixData } from '@/lib/fpl/views'
  */
 
 /** Cell widths, so the header and body columns line up as one grid. */
-const PLAYER_COLUMN = 'w-[7.5rem] min-w-[7.5rem] sm:w-44 sm:min-w-44'
+const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
 const SCORE_COLUMN = 'w-24 min-w-24'
 
 /**
@@ -69,7 +71,7 @@ export function FixturesTable({ view }: { view: MatrixData }) {
             </th>
             <th
               scope="col"
-              className={`sticky left-[7.5rem] z-20 hidden border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 sm:left-44 sm:table-cell dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${SCORE_COLUMN}`}
+              className={`sticky z-20 hidden border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 sm:table-cell dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
             >
               {/* Section 6.4: labelled Fixture Score, never FDR. */}
               <span title="Sum of 6 minus difficulty across the horizon, then the number of fixtures. Higher is better.">
@@ -180,7 +182,7 @@ function PlayerRow({
       </th>
 
       <td
-        className={`sticky left-[7.5rem] z-10 hidden border-b border-r border-neutral-200 px-2 py-1.5 text-right sm:left-44 sm:table-cell dark:border-neutral-800 ${rowBackground} ${SCORE_COLUMN}`}
+        className={`sticky z-10 hidden border-b border-r border-neutral-200 px-2 py-1.5 text-right sm:table-cell dark:border-neutral-800 ${rowBackground} ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
       >
         <ScoreBadge summary={summary} />
       </td>
