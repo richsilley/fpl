@@ -99,14 +99,33 @@ it rather than re-deriving picks.
 - Table wrapper is `overflow-x-auto` + `sticky left-0` first column — §8.5's
   pattern, verified at 320px: page doesn't scroll, table does, column holds.
 
+## Horizon control (§7.6) — shared with Club Blocks
+
+`app/components/horizon-selector.tsx`. Presets **1/3/5/8/10** plus a numeric
+input taking any integer from 1 to gameweeks remaining. Out-of-range values
+**clamp, never error** (`parseHorizon` → floor/1/38, then `clampHorizon` →
+season remainder). Reads/writes one `horizon` URL param so it survives a view
+switch — reuse this component in Club Blocks, don't fork it.
+
+**The one Client Component in the app.** §7.6 wants the preset highlight to
+follow what's *typed*, before submit, which is browser-only state. It degrades:
+presets are real links, the input is in a real GET form. It's keyed on
+`view.horizon` at the call site so navigation remounts it — don't reintroduce a
+`useEffect` to resync, lint forbids setState-in-effect.
+
+Columns start at the first **unfinished** gameweek, not `is_current`. Once a
+gameweek finishes `is_current` still points at it until the next deadline, so
+taking §7.2 literally would lead with a dead column and fold a played gameweek
+into the score.
+
 ## The four views
 
 Rows are the 15 players except where noted.
 
-1. **Fixtures** — "where are my fixture problems?" Columns are gameweeks (current
-   → GW38), each cell = opponent + H/A, shaded by raw FDR. Frozen name column.
-   Blanks = empty cells, doubles = split cells. Summary column shows Fixture
-   Score over a selectable horizon (3/5/8/10 GWs).
+1. **Fixtures** — "where are my fixture problems?" **Built.** Columns are
+   gameweeks (first *unfinished* → GW38), each cell = opponent + H/A, shaded by
+   raw FDR. Frozen name column. Blanks = empty cells, doubles = split cells.
+   Summary column shows Fixture Score over the §7.6 horizon.
 2. **Form** — "who is playing well / at risk?" Columns: price, price change this
    GW, price change since season start, form, total points, PPG, minutes, xG, xA,
    xGI, availability status, injury news text. Availability visually obvious: red
@@ -131,18 +150,36 @@ league/rival. Steps 1–3 are a shippable tool on their own.
 
 A single number for how good a run of fixtures is. Used in the Fixtures summary
 column and as the only metric in Club Blocks. **Higher is better.**
+Normalised to 0–10 as of requirements v1.7.
 
 ```
-fixtureValue  = 6 - FDR                          # FDR 1 → 5, FDR 5 → 1
-fixtureScore  = sum(6 - FDR) for all fixtures in the horizon
+fixtureValue  = 6 - FDR                                    # FDR 1 → 5, FDR 5 → 1
+fixtureScore  = ( sum(6 - FDR) / gameweeksInHorizon ) × 2  # 0–10, 6.0 = average
 ```
+
+**Divide by gameweeks, never by fixtures.** Gameweeks is a constant for a given
+horizon, so it only rescales. Dividing by fixture count is the averaging §6.2
+rejects — it would destroy the blanks/doubles handling.
+
+**Never cap above 10.** A double gameweek legitimately exceeds what singles can
+reach; §6.1 calls that informative, not an error.
 
 Invert-then-sum handles blanks and doubles with no special-casing: a missing
 fixture contributes 0 and lowers the score; an extra fixture adds value and
 raises it. No distance decay in v1 (deferred — adds a tuning parameter).
 
-Display as score with fixture count in brackets: `18 (5)`, `21 (6)` double,
-`15 (4)` blank. The count lets the user judge quality vs quantity themselves.
+Display to **one decimal place** with fixture count in brackets: `7.2 (5)`,
+`4.8 (4)` blank, `14.0 (7)` double. Normalisation makes the count *more*
+important, not less — it's what explains a surprising score.
+
+Anchors (horizon-independent): all FDR 1 → 10.0, FDR 2 → 8.0, FDR 3 → 6.0,
+FDR 4 → 4.0, FDR 5 → 2.0. Summary colour bands sit symmetrically around 6.0
+(`NEUTRAL_SCORE`) at ±0.5 and ±1.5.
+
+Pure horizon/score arithmetic lives in `lib/fpl/horizon.ts`, deliberately
+**not** `server-only` — the horizon control is a Client Component and importing
+a server-only module from one fails the build. `lib/fpl/fixtures.ts` re-exports
+it for server callers.
 
 **Do not call this FDR** — users expect low FDR = good, and this inverts that.
 Label it **Fixture Score**. Colour rule is constant: green = good everywhere.

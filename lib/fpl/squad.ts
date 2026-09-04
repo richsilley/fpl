@@ -22,6 +22,8 @@ export type SquadPlayer = {
   fullName: string
   /** GKP, DEF, MID or FWD. */
   position: string
+  /** Club ID, for joining to fixtures and to the three-per-club limit. */
+  teamId: number
   /** Club short name, e.g. "ARS". */
   club: string
   clubName: string
@@ -120,6 +122,7 @@ function toSquadPlayer(
     name: element.web_name,
     fullName: `${element.first_name} ${element.second_name}`.trim(),
     position: position?.singular_name_short ?? '?',
+    teamId: element.team,
     club: club?.short_name ?? '?',
     clubName: club?.name ?? 'Unknown club',
     price: element.now_cost,

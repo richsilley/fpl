@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.4
+**Version:** 1.7
 **Date:** 3 September 2026
 **Status:** Approved for build
 
@@ -132,13 +132,23 @@ fixtureValue = 6 - FDR
 
 An FDR of 1 becomes 5. An FDR of 5 becomes 1.
 
-Sum the inverted values across every fixture falling within the horizon:
+Sum the inverted values across every fixture falling within the horizon, divide by the number of **gameweeks** in the horizon, and scale to a 0 to 10 range:
 
 ```
-fixtureScore = sum(6 - FDR) for all fixtures in horizon
+fixtureScore = ( sum(6 - FDR) / gameweeksInHorizon ) × 2
 ```
 
-**Higher is better.**
+**Higher is better.** Display to one decimal place.
+
+**Divide by gameweeks, never by fixtures.** Gameweeks is a known constant for a given horizon, so the division is a pure rescaling that preserves every comparison. Dividing by fixture count would be the averaging rejected in 6.2 and would destroy the blanks and doubles handling.
+
+**Scores above 10 are valid.** A double gameweek can exceed the maximum achievable by single fixtures. This is informative, not an error. Do not cap it.
+
+### 6.1.1 Why normalise
+
+Without normalisation the score scales with the horizon, so a 3-gameweek view produces numbers up to 15 and a 10-gameweek view produces numbers up to 50. Changing the horizon then appears to change the meaning of the number.
+
+Normalising fixes this and has a second benefit: it makes horizons comparable to one another. A score of 8.4 describes the same quality of fixture run whether measured over one gameweek or ten. A 1-gameweek horizon becomes meaningful, which it is not under a raw sum.
 
 ### 6.2 Why inversion rather than sum or average of raw FDR
 
@@ -148,15 +158,15 @@ Inverting first makes blanks and doubles fall out of the arithmetic correctly wi
 
 ### 6.3 Display
 
-Render as the score followed by the fixture count in brackets:
+Render as the score to one decimal place, followed by the fixture count in brackets:
 
 ```
-18 (5)
-21 (6)   ← contains a double
-15 (4)   ← contains a blank
+7.2 (5)    normal run
+6.0 (4)    contains a blank, and the count shows why the score fell
+8.4 (6)    contains a double, and the count shows where the lift came from
 ```
 
-Showing the count lets the user see whether a high score came from quality or quantity, without the app encoding a judgement about how much a double is worth.
+**The fixture count is more important under normalisation, not less.** Dividing by gameweeks compresses the range, so the count is what explains an unexpected score. It also lets the user judge how much a double is worth to them, rather than the app encoding that judgement.
 
 ### 6.4 Naming and colour
 
@@ -195,7 +205,8 @@ Distance decay, weighting nearer gameweeks more heavily than distant ones, is de
 - Each cell shows the opponent, home/away indicator, and is shaded by FDR
 - Player name column is frozen; gameweek columns scroll horizontally
 - Blanks shown as empty cells, doubles as split cells
-- A summary column shows the **Fixture Score** (section 6) over a user-selected horizon (3, 5, 8 or 10 gameweeks), displayed as score with fixture count in brackets
+- A summary column shows the **Fixture Score** (section 6) over a user-selected horizon, displayed as score with fixture count in brackets
+- Horizon control per section 7.6
 
 ### 7.3 View 2 — Form
 
@@ -230,9 +241,22 @@ Columns: global ownership %, reference population ownership %, and the differenc
 **Question answered:** who should I buy?
 
 - Rows are the twenty Premier League clubs
-- **Fixture Score** (section 6) over a selectable horizon (3, 5, 8, 10 gameweeks), displayed as score with fixture count in brackets
+- **Fixture Score** (section 6) over a selectable horizon, displayed as score with fixture count in brackets
+- Horizon control per section 7.6
 - Sortable, highest score first
 - Indicate which clubs the user already holds players from, and how many, to surface the three-per-club limit
+
+### 7.6 Horizon control
+
+Shared by the Fixtures and Club Blocks views. Both must read from the same `horizon` URL parameter, so switching between the views preserves it.
+
+- **Preset buttons** for 1, 3, 5, 8 and 10 gameweeks, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline
+- **Numeric input** accepting any integer from 1 to the number of gameweeks remaining in the season
+- Clicking a preset sets the numeric input
+- Typing a custom value clears the preset highlight; typing a value that matches a preset highlights it
+- Values outside the valid range clamp to the nearest valid value rather than erroring
+
+A horizon of 1 is valid and useful. The normalised Fixture Score (6.1.1) makes a single-gameweek reading directly comparable to a ten-gameweek one.
 
 ## 8. Technical requirements
 
@@ -255,6 +279,21 @@ Application state lives entirely in the URL:
 
 This makes every view shareable by construction and removes the need for accounts or storage.
 
+**Parameters and defaults**
+
+| Parameter | Values | Default when absent |
+|---|---|---|
+| `id` | Manager ID | None. Show the ID entry form |
+| `view` | `fixtures`, `form`, `ownership`, `clubs` | `fixtures` |
+| `horizon` | Any integer from 1 to the gameweeks remaining in the season | `5` |
+| `league` | League ID | None. Ownership falls back to global mode |
+
+`?id=1234567` alone must land on the fixtures view at a 5-gameweek horizon. Nobody should need to type a `view` parameter to reach the main function of the app.
+
+**Changing any control updates the URL.** This is what makes state shareable and makes the browser back button work. A link sent to someone else must reproduce exactly what the sender was looking at.
+
+Invalid parameter values fall back to the default rather than erroring.
+
 ### 8.3 Caching
 
 Required, both for performance and to avoid placing load on FPL's servers.
@@ -270,9 +309,21 @@ Required, both for performance and to avoid placing load on FPL's servers.
 
 Target is zero. Vercel's hobby tier, no database, no AI calls, no paid data. Caching is what keeps this true as usage grows.
 
-### 8.5 Mobile
+### 8.5 Responsive layout
 
-Mobile is the primary target, not an afterthought. Frozen first column with horizontal scroll is the core pattern for every view.
+**Build mobile-first, but treat desktop as the primary surface for v1.**
+
+These are two separate things and the distinction matters.
+
+**Mobile-first is a build order, not a priority.** Write the narrow layout first, then widen it with breakpoints. Narrow-to-wide is additive; wide-to-narrow requires overrides that accumulate and break. A fifteen-row grid with 38 columns is precisely the layout that fails on a phone, so it must be built with narrow in mind from the start.
+
+**Desktop is where this will actually be used at present**, so it must look properly considered at 1440px rather than merely unbroken. Use the available width: show more gameweek columns before horizontal scrolling begins, rather than rendering a narrow table floating in a wide empty page.
+
+**Verify every view at both 380px and 1440px** before considering it complete.
+
+The frozen first column with horizontal scroll is the core pattern at all widths.
+
+Mobile becomes the primary surface once the tool is shared beyond the author, since most people check FPL on a phone. The layout should not need rebuilding when that happens.
 
 ## 9. Build order
 
