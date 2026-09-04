@@ -22,13 +22,27 @@ import {
  * relative to each other.
  */
 
-/** Fixture cell shading: raw FDR, so green is a low number (section 6.4). */
+/** Fixture cell shading: difficulty, so green is a low number (section 6.4). */
 export const FDR_TONE: Record<number, string> = {
   1: 'bg-emerald-200 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50',
   2: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-100',
   3: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
   4: 'bg-rose-100 text-rose-900 dark:bg-rose-900/50 dark:text-rose-100',
   5: 'bg-rose-200 text-rose-950 dark:bg-rose-800 dark:text-rose-50',
+}
+
+/**
+ * The band a difficulty falls in.
+ *
+ * The five bands above are unchanged; this only decides which one a number
+ * lands in. FPL's own rating is always a whole number and lands on its band
+ * exactly. The custom rating (section 6.7) is a fraction, so it is rounded to
+ * the nearest band rather than missing every key and falling through to the
+ * neutral one.
+ */
+export function fdrTone(fdr: number): string {
+  const band = Math.min(5, Math.max(1, Math.round(fdr)))
+  return FDR_TONE[band]
 }
 
 /**
@@ -67,6 +81,15 @@ export function scoreTone(score: number): string {
  * two fixtures is a double and splits the cell, each half shaded by its own
  * FDR since the two opponents are rarely of equal difficulty.
  */
+/**
+ * A whole number stays whole, a fraction gets one decimal. FPL's ratings are
+ * integers and printing "3.0" for them would imply a precision they do not
+ * have; the custom rating's "2.7" is real.
+ */
+function formatDifficulty(fdr: number): string {
+  return Number.isInteger(fdr) ? String(fdr) : fdr.toFixed(1)
+}
+
 export function FixtureCell({ fixtures }: { fixtures: TeamFixture[] }) {
   // `h-full` makes the cell fill the row, which matters below the sm
   // breakpoint where the first column carries a second line and so sets a
@@ -88,8 +111,8 @@ export function FixtureCell({ fixtures }: { fixtures: TeamFixture[] }) {
           key={`${fixture.opponent}-${position}`}
           className={`flex flex-1 items-center justify-center gap-0.5 leading-none ${
             split ? 'text-[10px]' : 'text-xs'
-          } ${FDR_TONE[fixture.fdr] ?? FDR_TONE[3]}`}
-          title={`${fixture.isHome ? 'Home to' : 'Away at'} ${fixture.opponentName} (difficulty ${fixture.fdr})`}
+          } ${fdrTone(fixture.fdr)}`}
+          title={`${fixture.isHome ? 'Home to' : 'Away at'} ${fixture.opponentName} (difficulty ${formatDifficulty(fixture.fdr)})`}
         >
           <span className="font-medium">{fixture.opponent}</span>
           <span className="text-[9px] uppercase opacity-70">

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getBootstrap, getFixtures } from './api'
+import { buildRating, type RatingSource } from './difficulty'
 import {
   buildFixtureIndex,
   clampHorizon,
@@ -40,11 +41,14 @@ export type MatrixData = {
    * the whole field.
    */
   totalPlayers: number
+  /** Which difficulty rating the index was built with (section 6.7). */
+  rating: RatingSource
 }
 
 export async function loadMatrixData(
   managerId: number,
-  horizon: Horizon
+  horizon: Horizon,
+  rating: RatingSource = 'fpl'
 ): Promise<MatrixData> {
   // `getBootstrap` is cached, so asking for it alongside `loadSquad` costs a
   // cache read rather than a second trip to the FPL API, and the fixtures
@@ -59,7 +63,14 @@ export async function loadMatrixData(
 
   return {
     squad,
-    fixtures: buildFixtureIndex(fixtures, bootstrap.teams),
+    // One index, built once with one rating, and both horizon views read it.
+    // That is what stops Fixtures and Club Blocks disagreeing (section 6.7).
+    fixtures: buildFixtureIndex(
+      fixtures,
+      bootstrap.teams,
+      buildRating(rating, fixtures, bootstrap.teams)
+    ),
+    rating,
     teams: bootstrap.teams,
     startGameweek,
     columns: gameweekColumns(startGameweek),

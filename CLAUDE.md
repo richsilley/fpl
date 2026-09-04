@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.13; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.14; v1 feature complete).
 
 ## What this is
 
@@ -156,7 +156,9 @@ rendered, `asleague` is the league its picker is listing. **`id` always stays
 the user's own team** — that is what makes "Back to my team" one link, and what
 keeps the league list theirs rather than the borrowed manager's.
 
-**Pass-through params travel as one `CarriedState` object**, not four props.
+`rating` picks the fixture difficulty: `fpl` (default) or `custom` (§6.7).
+
+**Pass-through params travel as one `CarriedState` object**, not five props.
 Threading them individually failed silently: a forgotten prop loses one
 parameter on one click and the build still passes. `view`/`horizon`/`sort`
 stay explicit, since each is *set* by some control.
@@ -189,6 +191,7 @@ load-bearing:
 | `params.ts` | URL state, `buildHref`, `carriedFields`, `CarriedState` |
 | `ownership.ts` | bands, direction flag, strategy ordering of the bands |
 | `defcon.ts` | DefCon thresholds + bar ratio (§7.3) |
+| `difficulty.ts` | the two fixture difficulty ratings (§6.7) |
 | `availability.ts` | status-code mapping |
 | `lib/format.ts` | price, rank, points |
 
@@ -364,6 +367,38 @@ Pure horizon/score arithmetic lives in `lib/fpl/horizon.ts`, deliberately
 **not** `server-only` — the horizon control is a Client Component and importing
 a server-only module from one fails the build. `lib/fpl/fixtures.ts` re-exports
 it for server callers.
+
+## Two difficulty ratings (§6.7)
+
+`?rating=fpl` (default) uses FPL's own pre-season FDR. `?rating=custom`
+derives one from results in `fixtures/` — **no new endpoints, no new projection
+fields**. `lib/fpl/difficulty.ts`:
+
+```
+observed = PPG over the last 6 completed matches
+prior    = strength_overall_home/away, averaged, mapped onto the PPG scale
+weight   = played / (played + 6)
+strength = weight x observed + (1 - weight) x prior
+```
+
+then linear across the 20 clubs onto 1–5, a league-wide home-advantage offset
+split ±half, clamped to 1–5.
+
+- **`teams.played`/`points`/`position` are never populated by FPL** (nor is
+  `strength`). Count results from the fixtures.
+  `strength_overall_home`/`_away` *are* populated — they're the prior.
+- **Early season it's mostly prior, by design** — at 2 games `weight` is 0.25.
+  Two results aren't evidence. **The 6-match window is what lets a rating fall
+  when form does**; a whole-season `observed` would converge and freeze, which
+  is the static FDR's exact failing.
+- `weight` counts *all* games while `observed` reads the last 6. Not a bug:
+  confidence grows with the season, the estimate tracks current form.
+- **Injected into `buildFixtureIndex`, so it lands in `TeamFixture.fdr`** and
+  everything downstream is untouched — Fixture Score, colour bands and Club
+  Blocks needed no changes. One index per request means Fixtures and Club
+  Blocks can never disagree.
+- Only adjustment: `fdrTone()` rounds to a band, since a fractional FDR matched
+  no integer key and fell through to neutral. The five bands are unchanged.
 
 **Do not call this FDR** — users expect low FDR = good, and this inverts that.
 Label it **Fixture Score**. Colour rule is constant: green = good everywhere.

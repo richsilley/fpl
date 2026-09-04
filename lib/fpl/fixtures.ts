@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { fplRating, type Rating } from './difficulty'
 import { LAST_GAMEWEEK, type Horizon } from './horizon'
 import type { FplEvent, FplFixture, FplTeam } from './types'
 
@@ -33,7 +34,14 @@ export type TeamFixture = {
   opponent: string
   opponentName: string
   isHome: boolean
-  /** Raw FDR, 1 to 5. Low is easy. Only shown in individual cells. */
+  /**
+   * Difficulty, 1 to 5. Low is easy. Only shown in individual cells.
+   *
+   * A whole number under FPL's own rating, a fraction under the custom one
+   * (section 6.7). Everything downstream treats it the same, which is why the
+   * two ratings need no other change: the cell shading rounds for its band and
+   * the Fixture Score keeps the full precision.
+   */
   fdr: number
   /** `6 - fdr`, the inverted value the Fixture Score sums. Section 6.1. */
   value: number
@@ -48,9 +56,15 @@ export type TeamFixture = {
  */
 export type FixtureIndex = Map<number, Map<number, TeamFixture[]>>
 
+/**
+ * @param rating which difficulty rating to score with (section 6.7). Injected
+ *   rather than chosen here, so a view cannot pick its own and the Fixtures
+ *   and Club Blocks views can never disagree about a fixture.
+ */
 export function buildFixtureIndex(
   fixtures: FplFixture[],
-  teams: FplTeam[]
+  teams: FplTeam[],
+  rating: Rating = fplRating
 ): FixtureIndex {
   const clubsById = new Map(teams.map((team) => [team.id, team]))
   const index: FixtureIndex = new Map(teams.map((team) => [team.id, new Map()]))
@@ -62,8 +76,8 @@ export function buildFixtureIndex(
       continue
     }
 
-    addFixture(index, clubsById, fixture, true)
-    addFixture(index, clubsById, fixture, false)
+    addFixture(index, clubsById, fixture, true, rating)
+    addFixture(index, clubsById, fixture, false, rating)
   }
 
   return index
@@ -73,11 +87,12 @@ function addFixture(
   index: FixtureIndex,
   clubsById: Map<number, FplTeam>,
   fixture: FplFixture,
-  forHome: boolean
+  forHome: boolean,
+  rating: Rating
 ): void {
   const teamId = forHome ? fixture.team_h : fixture.team_a
   const opponentId = forHome ? fixture.team_a : fixture.team_h
-  const fdr = forHome ? fixture.team_h_difficulty : fixture.team_a_difficulty
+  const fdr = rating(fixture, forHome)
 
   const byGameweek = index.get(teamId)
   const opponent = clubsById.get(opponentId)

@@ -134,6 +134,22 @@ export function ownershipModeOf(
   return 'global'
 }
 
+/**
+ * Which fixture difficulty rating the horizon views score with (section 6.7).
+ *
+ * Defaults to FPL's own, so a link with no opinion reproduces the official
+ * numbers and nobody is shown a derived rating without having asked for it.
+ */
+export const RATING_SOURCES = ['fpl', 'custom'] as const
+export type RatingSource = (typeof RATING_SOURCES)[number]
+export const DEFAULT_RATING: RatingSource = 'fpl'
+
+export function parseRating(value: string | undefined): RatingSource {
+  return (RATING_SOURCES as readonly string[]).includes(value ?? '')
+    ? (value as RatingSource)
+    : DEFAULT_RATING
+}
+
 /** A manager or league ID from the URL. Returns null for anything invalid. */
 export function parseEntityId(value: string | undefined): number | null {
   if (!value || !/^\d+$/.test(value)) {
@@ -251,6 +267,8 @@ export type AppState = {
   as?: string | null
   /** Which league the view-as picker is listing. See `as`. */
   asLeague?: string | null
+  /** Fixture difficulty rating for the horizon views (section 6.7). */
+  rating?: RatingSource | null
 }
 
 /**
@@ -268,7 +286,7 @@ export type AppState = {
  */
 export type CarriedState = Pick<
   AppState,
-  'league' | 'rival' | 'as' | 'asLeague'
+  'league' | 'rival' | 'as' | 'asLeague' | 'rating'
 >
 
 /** Drops the view-as target, and the league list that fed it. */
@@ -291,6 +309,7 @@ export function buildHref({
   rival,
   as,
   asLeague,
+  rating,
 }: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
@@ -318,6 +337,9 @@ export function buildHref({
   }
   if (asLeague) {
     params.set('asleague', asLeague)
+  }
+  if (rating && rating !== DEFAULT_RATING) {
+    params.set('rating', rating)
   }
   return `/?${params.toString()}`
 }

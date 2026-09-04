@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.13
+**Version:** 1.14
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -209,6 +209,57 @@ Blanks and doubles do not exist in the fixture list at the start of a season. Th
 ### 6.6 Deferred
 
 Distance decay, weighting nearer gameweeks more heavily than distant ones, is deliberately excluded from v1. It is closer to how managers actually think but introduces a tuning parameter and makes the number harder to explain.
+
+### 6.7 Custom difficulty rating
+
+FPL's FDR is set before a ball is kicked and never moves. A promoted side that turns out to be decent keeps its easy rating all season; a big club in freefall keeps its hard one. An alternative rating, derived from results, is offered alongside it and **toggled per 8.2 so a shared link carries which one produced it**.
+
+**FPL's own rating is the default.** Nobody is shown a derived number without having asked for it.
+
+#### Data
+
+Everything comes from `fixtures/`, which every view already loads. `team_h_score`, `team_a_score` and `finished` are enough to reconstruct both the table and recent form. **No new endpoints, and no new fields in the `elements` projection.**
+
+**The `teams` array's own `played`, `points` and `position` are not populated by FPL** — they sit at zero or null all season — so they are ignored and the results are counted from the fixtures instead. `strength` is likewise null; `strength_overall_home` and `strength_overall_away` *are* populated and are what the prior reads. Those two were already in the payload, since `teams` passes through the projection whole (5.3); only the type had not named them.
+
+#### The model
+
+For each club:
+
+```
+observed = points per game over their last 6 completed matches
+prior    = FPL's overall strength, mapped onto the same points-per-game scale
+weight   = played / (played + 6)
+strength = weight x observed + (1 - weight) x prior
+```
+
+**Early in the season the rating is mostly the prior, and that is deliberate.** After two matches `weight` is 0.25, so three quarters of a club's rating is still FPL's pre-season opinion. Two results are not evidence, and a rating that swung wildly on them would be worse than the static one it replaces. Confidence in the observed record grows with the season: two thirds by GW12, six sevenths by GW38.
+
+**The six-match window is what lets a rating fall when form does.** `weight` only ever rises, so if `observed` read the whole season a club's rating would converge and then freeze — which is the exact failing of the static FDR. Reading form over a rolling window means a good side on a bad run becomes easier to play, and the rating still says something current at GW38.
+
+Note that `weight` counts *all* matches played while `observed` reads only the last six. That is not an inconsistency: how confident we are grows with the whole season's evidence, while what we are confident about is the club's current form.
+
+#### Home advantage
+
+One figure for the division, measured from all completed fixtures as total home points minus total away points per match, applied as a **constant offset** rather than by splitting each club's record.
+
+Half a season gives a club nine or ten home games, far too few to separate a real home effect from noise, while the league-wide figure has hundreds of matches behind it. The offset is split evenly either side, so the league's mean difficulty is unchanged: playing the away side is easier by as much as playing the home side is harder.
+
+Early in the season this figure is itself noisy and will be larger than it ends up. It settles as matches accumulate, on the same principle as everything else here.
+
+#### Output
+
+Strength is mapped **linearly across the twenty clubs onto 1 to 5**, fractions allowed, with a strong opponent scoring high to match FPL's convention. The venue offset is then applied and the result clamped to 1–5.
+
+**Clamping costs something and is still right.** The strongest club reads 5 whether at home or away, so its home advantage is invisible. The alternative — widening the scale to fit the offset — would mean no club ever reached either end of it, which is worse.
+
+**Nothing downstream changes.** Fixture Score, the colour bands and Club Blocks all read the same field they always did; only the number in it differs. The one adjustment is that cell shading rounds to the nearest band, since a fractional rating would otherwise match no band at all. The five bands themselves are untouched.
+
+**Both horizon views share one rating.** It is chosen once, in the URL, and one fixture index is built from it, so Fixtures and Club Blocks cannot disagree about a club.
+
+#### Deferred
+
+Goal difference and margin of victory are ignored: points per game is what the league table runs on and what managers already think in. Attack and defence strengths are ignored too, so the rating cannot say a club is hard to score against but easy to beat.
 
 ## 7. Functional requirements
 
@@ -500,6 +551,7 @@ This makes every view shareable by construction and removes the need for account
 | `rival` | Manager ID of a single rival | None. Ownership falls back to global mode |
 | `as` | Manager whose squad is shown, when not `id` | None. Shows the user's own squad |
 | `asleague` | League the view-as picker is listing | None. No team dropdown yet |
+| `rating` | `fpl` or `custom` difficulty (6.7) | `fpl`, FPL's own rating |
 
 `league` and `rival` select the Ownership view's reference population. They are **not** mutually exclusive: a URL carrying both means "compare against this rival, chosen from this league", and `rival` is the population. `league` alone is league mode. See 7.4 for why the league is kept.
 

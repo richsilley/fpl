@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { ManagerIdForm } from '@/app/components/manager-id-form'
 import { OwnershipModeSelector } from '@/app/components/ownership-mode-selector'
 import { OwnershipTable } from '@/app/components/ownership-table'
+import { RatingToggle } from '@/app/components/rating-toggle'
 import { SquadHeader } from '@/app/components/squad-header'
 import { ViewAsSelector } from '@/app/components/view-as-selector'
 import { ViewTabs } from '@/app/components/view-tabs'
@@ -23,12 +24,14 @@ import {
   parseClubSort,
   parseEntityId,
   parseFormSort,
+  parseRating,
   parseView,
   usesHorizon,
   VIEW_LABELS,
   withoutViewAs,
   type CarriedState,
   type ClubSort,
+  type RatingSource,
   type ViewId,
 } from '@/lib/fpl/params'
 import {
@@ -99,6 +102,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const rivalId = parseEntityId(first(params.rival))
   const asId = parseEntityId(first(params.as))
   const asLeagueId = parseEntityId(first(params.asleague))
+  const rating = parseRating(first(params.rating))
   // An unparseable league or rival ID falls back to global rather than
   // erroring, per section 8.2.
   const ownershipMode = ownershipModeOf(
@@ -134,6 +138,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             rivalId={rivalId}
             asId={asId}
             asLeagueId={asLeagueId}
+            rating={rating}
           />
         ) : (
           <EmptyState />
@@ -154,6 +159,7 @@ async function MatrixSection({
   rivalId,
   asId,
   asLeagueId,
+  rating,
 }: {
   managerId: string
   view: ViewId
@@ -168,6 +174,8 @@ async function MatrixSection({
   asId: number | null
   /** League the view-as picker is listing. */
   asLeagueId: number | null
+  /** Which fixture difficulty rating to score with (section 6.7). */
+  rating: RatingSource
 }) {
   const myId = parseManagerId(managerId)
   // Viewing as yourself is the same as not viewing as anyone. Collapsing it
@@ -181,11 +189,12 @@ async function MatrixSection({
     rival: rivalId === null ? null : String(rivalId),
     as: viewedId === null ? null : String(viewedId),
     asLeague: asLeagueId === null ? null : String(asLeagueId),
+    rating,
   }
 
   let data: MatrixData
   try {
-    data = await loadMatrixData(viewedId ?? myId, horizon)
+    data = await loadMatrixData(viewedId ?? myId, horizon, rating)
   } catch (error) {
     const fplError =
       error instanceof FplApiError
@@ -270,24 +279,37 @@ async function MatrixSection({
               {usesHorizon(view) && ` Gameweek ${data.startGameweek} onwards.`}
             </p>
           </div>
-          {/* Only the two horizon-driven views get the control. Showing it on
-              the Form view would offer a setting that changes nothing there.
-              The parameter is still carried through, so switching back to
-              Fixtures returns to the horizon you left (section 7.6).
+          {/* Only the two horizon-driven views get these. Showing them on the
+              Form view would offer settings that change nothing there. Both
+              parameters are still carried through, so switching back to
+              Fixtures returns to the horizon and rating you left (7.6, 6.7).
+
+              Both controls appear on both horizon views, so the two can never
+              be scored differently in the same session.
 
               The applied horizon, not the requested one, so a clamped value
               shows what is actually on screen. Keyed on it so a navigation
               remounts the control and its input picks up the new value. */}
           {usesHorizon(view) && (
-            <HorizonSelector
-              key={`${view}-${data.horizon}`}
-              managerId={managerId}
-              horizon={data.horizon}
-              maxHorizon={data.maxHorizon}
-              view={view}
-              sort={rawSort}
-              carry={carry}
-            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
+              <RatingToggle
+                managerId={managerId}
+                rating={rating}
+                view={view}
+                horizon={data.horizon}
+                sort={rawSort}
+                carry={carry}
+              />
+              <HorizonSelector
+                key={`${view}-${data.horizon}`}
+                managerId={managerId}
+                horizon={data.horizon}
+                maxHorizon={data.maxHorizon}
+                view={view}
+                sort={rawSort}
+                carry={carry}
+              />
+            </div>
           )}
         </div>
 
@@ -373,7 +395,7 @@ async function MatrixSection({
 
         {/* The legend explains fixture shading and the Fixture Score, neither
             of which the Form view shows. */}
-        {usesHorizon(view) && <FixturesLegend />}
+        {usesHorizon(view) && <FixturesLegend rating={rating} />}
       </section>
     </div>
   )

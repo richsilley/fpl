@@ -32,7 +32,22 @@ export type FplTeam = {
   code: number
   name: string
   short_name: string
-  strength: number
+  /**
+   * Null on the live API all season, despite the name. Kept typed so nothing
+   * reads it expecting a number; use the overall strengths below instead.
+   */
+  strength: number | null
+  /**
+   * FPL's pre-season assessment of the club, roughly 1 to 5. These *are*
+   * populated, unlike `strength`, `played`, `points` and `position`, which the
+   * API leaves at zero or null. The custom difficulty rating uses them as its
+   * prior (section 6.7).
+   *
+   * `teams` is passed through the bootstrap projection whole (section 5.3), so
+   * these were already in the payload; only the type had not named them.
+   */
+  strength_overall_home: number
+  strength_overall_away: number
 }
 
 /**
