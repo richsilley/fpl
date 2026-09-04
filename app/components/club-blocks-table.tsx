@@ -33,29 +33,36 @@ import {
 const CLUB_COLUMN = 'w-[9.5rem] min-w-[9.5rem] sm:w-52 sm:min-w-52'
 const SCORE_COLUMN = 'hidden sm:table-cell w-24 min-w-24'
 const OWNED_COLUMN = 'hidden sm:table-cell w-56 min-w-56'
-const GW_COLUMN = 'w-[3.25rem] min-w-[3.25rem]'
+/**
+ * Gameweek columns are sized to the number on show, matching the Fixtures
+ * view: a short horizon leaves room to breathe, a long one packs down so more
+ * of the season stays on screen.
+ */
+function gameweekColumnWidth(count: number): string {
+  if (count <= 6) return 'w-24 min-w-24'
+  if (count <= 12) return 'w-[4.5rem] min-w-[4.5rem]'
+  return 'w-[3.25rem] min-w-[3.25rem]'
+}
 
 export function ClubBlocksTable({
   blocks,
   managerId,
   horizon,
   startGameweek,
-  columns,
   sort,
 }: {
   blocks: ClubBlock[]
   managerId: string
   horizon: Horizon
   startGameweek: number
-  /** Every gameweek column, matching the order of each block's fixtures. */
-  columns: number[]
   sort: ClubSort
 }) {
-  // The score covers the horizon, but the table shows the whole season with
-  // the horizon banded, exactly as the Fixtures view does. It keeps the two
-  // views the same shape, and stops a short horizon leaving most of the table
-  // width empty.
-  const inHorizon = new Set(horizonGameweeks(startGameweek, horizon))
+  // The horizon selects the columns, matching the Fixtures view: choosing five
+  // gameweeks shows five columns, and the cells on screen are exactly the ones
+  // the score is computed from. Must stay in step with `buildClubBlocks`,
+  // which builds each row's fixtures over the same window.
+  const columns = horizonGameweeks(startGameweek, horizon)
+  const GW_COLUMN = gameweekColumnWidth(columns.length)
   const active = splitClubSort(sort)
 
   const sortHref = (field: ClubSortField) =>
@@ -113,16 +120,20 @@ export function ClubBlocksTable({
               <th
                 key={gameweek}
                 scope="col"
-                className={`border-b border-neutral-200 px-1 py-2 text-center text-xs font-medium tabular-nums dark:border-neutral-800 ${GW_COLUMN} ${
-                  inHorizon.has(gameweek)
-                    ? 'bg-neutral-200 text-neutral-800 dark:bg-neutral-700 dark:text-neutral-100'
-                    : 'bg-neutral-50 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
-                }`}
+                className={`border-b border-neutral-200 bg-neutral-50 px-1 py-2 text-center text-xs font-medium tabular-nums text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${GW_COLUMN}`}
               >
                 <span className="sr-only">Gameweek </span>
+                <span aria-hidden>GW</span>
                 {gameweek}
               </th>
             ))}
+            {/* Absorbs leftover width so a short horizon does not stretch the
+                real columns across the page. Collapses to nothing once the
+                table is wider than its container. */}
+            <th
+              aria-hidden
+              className="w-auto border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800"
+            />
           </tr>
         </thead>
 
@@ -132,6 +143,7 @@ export function ClubBlocksTable({
               key={block.teamId}
               block={block}
               gameweekCount={columns.length}
+              gwColumn={GW_COLUMN}
             />
           ))}
         </tbody>
@@ -143,9 +155,11 @@ export function ClubBlocksTable({
 function ClubRow({
   block,
   gameweekCount,
+  gwColumn,
 }: {
   block: ClubBlock
   gameweekCount: number
+  gwColumn: string
 }) {
   const owned = block.owned.length
   const atLimit = owned >= MAX_PLAYERS_PER_CLUB
@@ -195,11 +209,16 @@ function ClubRow({
         // `h-full` against the row instead of its own content height.
         <td
           key={index}
-          className={`h-px border-b border-l border-neutral-100 p-0 dark:border-neutral-800/70 ${GW_COLUMN}`}
+          className={`h-px border-b border-l border-neutral-100 p-0 dark:border-neutral-800/70 ${gwColumn}`}
         >
           <FixtureCell fixtures={block.fixtures[index] ?? []} />
         </td>
       ))}
+      {/* Matches the spacer in the header. */}
+      <td
+        aria-hidden
+        className={`w-auto border-b border-neutral-100 dark:border-neutral-800/70 ${rowBackground}`}
+      />
     </tr>
   )
 }

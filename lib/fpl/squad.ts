@@ -67,6 +67,8 @@ export type SquadManager = {
   overallRank: number | null
   /** Points scored in the gameweek shown. */
   gameweekPoints: number
+  /** Season points total as at the gameweek shown. */
+  overallPoints: number
   gameweek: number
   /**
    * The manager's own mini leagues, so the Ownership view can offer them
@@ -126,6 +128,7 @@ export async function loadSquad(managerId: number): Promise<Squad> {
       // gameweek whose squad is on screen.
       overallRank: picks.entry_history.overall_rank,
       gameweekPoints: picks.entry_history.points,
+      overallPoints: picks.entry_history.total_points,
       gameweek,
       leagues: (entry.leagues?.classic ?? [])
         // `x` is a league someone created. `s` is one FPL enrolled them into.

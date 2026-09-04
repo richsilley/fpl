@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.8; all seven build order steps complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.9; v1 feature complete).
 
 ## What this is
 
@@ -107,7 +107,7 @@ it rather than re-deriving picks.
 All params in `lib/fpl/params.ts`. **Every control is a link or a GET form, and
 every one must carry the whole state through** — otherwise changing the horizon
 silently resets the sort, or sorting bounces you to another view. Use
-`buildHref({id, view, horizon, sort})`; it omits values at their default, so
+`buildHref({id, view, horizon, sort, league, rival})`; it omits values at their default, so
 `?id=X` alone is the canonical fixtures/horizon-5 URL §8.2 requires. The
 horizon control's GET form needs hidden `view`/`sort` inputs for the same
 reason. Invalid values fall back to defaults, never error.
@@ -163,8 +163,9 @@ Shared cell/badge rendering and both colour scales live in
 
 ## Horizon control (§7.6) — Fixtures and Club Blocks only
 
-`app/components/horizon-selector.tsx`. Presets **1/3/5/8/10** plus a numeric
-input taking any integer from 1 to gameweeks remaining. Out-of-range values
+`app/components/horizon-selector.tsx`. Presets **1/3/5/7/All** plus a numeric
+input taking any integer from 1 to gameweeks remaining. "All" resolves to
+the remaining gameweeks — it is a normal horizon value, not a special case. Out-of-range values
 **clamp, never error** (`parseHorizon` → floor/1/38, then `clampHorizon` →
 season remainder). Reads/writes one `horizon` URL param so it survives a view
 switch — reuse this component in Club Blocks, don't fork it.
@@ -184,8 +185,10 @@ into the score.
 
 Rows are the 15 players except where noted.
 
-1. **Fixtures** — "where are my fixture problems?" **Built.** Columns are
-   gameweeks (first *unfinished* → GW38), each cell = opponent + H/A, shaded by
+1. **Fixtures** — "where are my fixture problems?" **Built.** Columns are the
+   gameweeks **in the horizon** (1 selected → 1 column); headers read "GW3".
+   A trailing spacer column soaks up leftover width so short horizons don't
+   stretch cells across the page. Each cell = opponent + H/A, shaded by
    raw FDR. Frozen name column. Blanks = empty cells, doubles = split cells.
    Summary column shows Fixture Score over the §7.6 horizon.
 2. **Form** — "who is playing well / at risk?" **Built.** Columns: price, price
@@ -228,7 +231,9 @@ Rows are the 15 players except where noted.
 4. **Club Blocks** — "who should I buy?" **Built.** The deliberate exception:
    rows are the **20 clubs**, not the 15 players. Fixture Score over the §7.6
    horizon, sortable (default highest first). Owned count per club with an
-   amber "3 max" badge at the three-per-club limit.
+   amber "3 max" badge at the three-per-club limit. **Columns, headers and
+   widths behave exactly as Fixtures** — horizon selects the columns, "GW3"
+   labels, trailing spacer. Keep the two in step.
 
 Build order: all seven steps complete. Remaining work is v2 (§10).
 

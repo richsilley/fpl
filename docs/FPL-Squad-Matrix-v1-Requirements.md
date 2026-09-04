@@ -214,14 +214,27 @@ Distance decay, weighting nearer gameweeks more heavily than distant ones, is de
 - User enters a manager ID, or arrives via a URL containing one
 - App fetches the most recent completed gameweek's picks
 - Fifteen players render as rows, starting XI first, bench in order
-- Manager name, team name, overall rank and gameweek points shown as a header
 - Clear error state if the ID is invalid or the API is unavailable
+
+**Header.** Manager name and team name, then four figures in this order:
+
+| Figure | Source |
+|---|---|
+| GW*n* points | Points scored in the gameweek shown |
+| Overall points | Season total as at that gameweek |
+| Overall rank | Rank as at that gameweek |
+| Top *x*% | Overall rank divided by total entries, to one decimal place |
+
+All four describe the gameweek on screen rather than live values, which is why the gameweek is named in the points label. They come from the picks payload's `entry_history`, not the entry summary, so they stay consistent with the squad being shown.
+
+**Top *x*% is the inverse framing of the Ownership view's "ahead of *y*% of managers".** Both are shown deliberately: the header answers "how am I doing", section 7.4 answers "how much room is there above me". They should always sum to 100.
 
 ### 7.2 View 1 — Fixtures
 
 **Question answered:** where are my fixture problems?
 
-- Columns are gameweeks, from the current one through GW38
+- **Columns are the gameweeks in the selected horizon**, starting at the current one. Selecting 5 shows five columns; selecting 1 shows one. Gameweeks outside the window are not dimmed or banded, they are not rendered. **All** shows the rest of the season, through GW38
+- Column headers read `GW3`, `GW4` and so on, not bare numbers
 - Each cell shows the opponent, home/away indicator, and is shaded by FDR
 - Player name column is frozen; gameweek columns scroll horizontally
 - Blanks shown as empty cells, doubles as split cells
@@ -230,7 +243,11 @@ Distance decay, weighting nearer gameweeks more heavily than distant ones, is de
 
 **"The current one" means the first gameweek not yet finished, not the API's `is_current`.** The two differ for most of the week. `is_current` advances at each deadline and stays on a gameweek after it finishes, so taking it literally would lead with a column of results nobody can act on, and would fold a played gameweek into the Fixture Score, which is meant to describe the run ahead. Mid-gameweek the first unfinished gameweek is the one being played; once it finishes it becomes the next one. The same start gameweek drives both views.
 
-**The horizon is banded in the column headers** so the reader can see which gameweeks the summary score covers.
+**The horizon selects the columns, not just the score.** Banding the horizon inside a full-season table was the earlier behaviour and is superseded: the matrix now only ever shows the run being scored, so the summary column and the cells beside it always describe the same gameweeks.
+
+**Column widths scale to the number on show,** so a one-gameweek view is not a single hairline column and a full-season view still fits a useful stretch on screen. A trailing spacer column absorbs any width left over, which keeps the real columns at their intended size rather than stretching them across the page at short horizons.
+
+**Club Blocks does the same** (7.5). Both views treat the shared horizon identically, so switching between them changes the rows and the columns stay put.
 
 **Below the `sm` breakpoint the summary column is hidden** and the score moves under the player name instead. Kept as a column it consumes most of a phone's width and no fixtures are visible at all, which defeats the view. See 8.5.
 
@@ -312,9 +329,9 @@ This view has no horizon, so like the Form view it does not show the horizon con
 - Sortable, highest score first
 - Indicate which clubs the user already holds players from, and how many, to surface the three-per-club limit
 
-**Gameweek columns.** The view shows the same gameweek columns as the Fixtures view, from the start gameweek through GW38, with the horizon banded in the headers. The score still covers the horizon alone.
+**Gameweek columns.** Identical to the Fixtures view (7.2): the horizon selects the columns, so choosing five gameweeks shows five, and headers read `GW3` rather than a bare number. The cells on screen are always the ones the score is computed from, and switching between the two views keeps the same run of gameweeks in place.
 
-Two reasons. "Who should I buy" is partly a question about what comes *after* the run being scored, so the columns beyond the horizon are useful rather than noise. And a table showing only the horizon leaves most of the width empty at short horizons, which section 8.5 rules out.
+Column widths scale to the number on show, and a trailing spacer absorbs any width left over so a short horizon does not stretch the columns across the page.
 
 **Sorting** is by club, Fixture Score or owned count, either direction, and lives in the `sort` URL parameter rather than component state so a sorted table is a link someone can send (see 8.2). Ties break on club name so the order is stable. Note that clubs sort on the name FPL supplies, which is `Spurs`, not `Tottenham`.
 
@@ -326,7 +343,7 @@ Two reasons. "Who should I buy" is partly a question about what comes *after* th
 
 Shared by the Fixtures and Club Blocks views. Both must read from the same `horizon` URL parameter, so switching between the views preserves it.
 
-- **Preset buttons** for 1, 3, 5, 8 and 10 gameweeks, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline
+- **Preset buttons** for 1, 3, 5, 7 and **All**, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline. **All** is not a fixed number: it resolves to the gameweeks remaining, so it moves as the season does and is highlighted whenever the applied horizon happens to be the whole remainder
 - **Numeric input** accepting any integer from 1 to the number of gameweeks remaining in the season
 - Clicking a preset sets the numeric input
 - Typing a custom value clears the preset highlight; typing a value that matches a preset highlights it

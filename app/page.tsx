@@ -167,7 +167,10 @@ async function MatrixSection({
 
   return (
     <div className="space-y-6">
-      <SquadHeader manager={data.squad.manager} />
+      <SquadHeader
+        manager={data.squad.manager}
+        totalPlayers={data.totalPlayers}
+      />
 
       <ViewTabs
         managerId={managerId}
@@ -205,6 +208,8 @@ async function MatrixSection({
               maxHorizon={data.maxHorizon}
               view={view}
               sort={sort}
+              league={leagueId === null ? null : String(leagueId)}
+              rival={rivalId === null ? null : String(rivalId)}
             />
           )}
         </div>
@@ -217,13 +222,11 @@ async function MatrixSection({
               squad: data.squad,
               startGameweek: data.startGameweek,
               horizon: data.horizon,
-              columns: data.columns,
               sort,
             })}
             managerId={managerId}
             horizon={data.horizon}
             startGameweek={data.startGameweek}
-            columns={data.columns}
             sort={sort}
           />
         ) : view === 'form' ? (

@@ -33,6 +33,8 @@ export function HorizonSelector({
   maxHorizon,
   view,
   sort,
+  league,
+  rival,
 }: {
   managerId: string
   horizon: Horizon
@@ -42,6 +44,9 @@ export function HorizonSelector({
   view: ViewId
   /** Carried through so changing the horizon keeps the Club Blocks sort. */
   sort: ClubSort
+  /** Carried through so it survives too (section 8.2). */
+  league: string | null
+  rival: string | null
 }) {
   // Mirrors the input so the highlight can follow what is typed, rather than
   // only what has been applied. Seeded from the applied horizon; the caller
@@ -50,7 +55,7 @@ export function HorizonSelector({
   const [draft, setDraft] = useState(String(horizon))
 
   const href = (value: number) =>
-    buildHref({ id: managerId, view, horizon: value, sort })
+    buildHref({ id: managerId, view, horizon: value, sort, league, rival })
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -67,34 +72,44 @@ export function HorizonSelector({
           aria-labelledby="horizon-label"
           className="inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-700"
         >
-          {HORIZON_PRESETS.filter((preset) => preset <= maxHorizon).map(
-            (preset) => {
-              // Highlights what is typed, not only what is applied, so a
-              // custom value clears the presets as section 7.6 asks.
-              const selected = draft === String(preset)
-              return (
-                <Link
-                  key={preset}
-                  href={href(preset)}
-                  aria-current={selected ? 'true' : undefined}
-                  scroll={false}
-                  // Clicking a preset sets the numeric input (section 7.6).
-                  // Navigation reloads with the new value anyway; this keeps
-                  // the input in step immediately rather than after the round
-                  // trip.
-                  onClick={() => setDraft(String(preset))}
-                  className={`rounded px-2.5 py-1 text-sm font-medium tabular-nums transition-colors ${
-                    selected
-                      ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-                      : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  {preset}
-                  <span className="sr-only"> gameweeks</span>
-                </Link>
-              )
-            }
-          )}
+          {[
+            ...HORIZON_PRESETS.filter((preset) => preset < maxHorizon).map(
+              (preset) => ({ value: preset, label: String(preset) })
+            ),
+            // "All" is the rest of the season. It resolves to a number like
+            // any other horizon, so nothing downstream needs to know it is
+            // special, and it lights up whenever the applied value happens to
+            // be the whole remainder.
+            { value: maxHorizon, label: 'All' },
+          ].map(({ value, label }) => {
+            // Highlights what is typed, not only what is applied, so a custom
+            // value clears the presets as section 7.6 asks.
+            const selected = draft === String(value)
+            return (
+              <Link
+                key={label}
+                href={href(value)}
+                aria-current={selected ? 'true' : undefined}
+                scroll={false}
+                // Clicking a preset sets the numeric input (section 7.6).
+                // Navigation reloads with the new value anyway; this keeps the
+                // input in step immediately rather than after the round trip.
+                onClick={() => setDraft(String(value))}
+                className={`rounded px-2.5 py-1 text-sm font-medium tabular-nums transition-colors ${
+                  selected
+                    ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
+                    : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
+                }`}
+              >
+                {label}
+                <span className="sr-only">
+                  {label === 'All'
+                    ? ` (${value} gameweeks, the rest of the season)`
+                    : ' gameweeks'}
+                </span>
+              </Link>
+            )
+          })}
         </span>
 
         <span className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -108,6 +123,8 @@ export function HorizonSelector({
           <input type="hidden" name="id" value={managerId} />
           <input type="hidden" name="view" value={view} />
           <input type="hidden" name="sort" value={sort} />
+          {league && <input type="hidden" name="league" value={league} />}
+          {rival && <input type="hidden" name="rival" value={rival} />}
           <label htmlFor="horizon" className="sr-only">
             Custom horizon, 1 to {maxHorizon} gameweeks
           </label>

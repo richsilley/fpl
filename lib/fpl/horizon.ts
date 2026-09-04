@@ -17,8 +17,13 @@ export const LAST_GAMEWEEK = 38
  */
 export type Horizon = number
 
-/** One-click horizons (section 7.6). 1 is the question asked at a deadline. */
-export const HORIZON_PRESETS = [1, 3, 5, 8, 10] as const
+/**
+ * One-click horizons (section 7.6). 1 is the question asked at a deadline.
+ *
+ * The control also offers "All", which is not a fixed number: it resolves to
+ * the gameweeks remaining in the season, so it moves as the season does.
+ */
+export const HORIZON_PRESETS = [1, 3, 5, 7] as const
 
 export const DEFAULT_HORIZON: Horizon = 5
 

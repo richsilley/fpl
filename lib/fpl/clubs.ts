@@ -3,6 +3,7 @@ import 'server-only'
 import {
   fixtureScore,
   fixturesFor,
+  horizonGameweeks,
   type FixtureIndex,
   type FixtureScore,
   type Horizon,
@@ -29,9 +30,8 @@ export type ClubBlock = {
   shortName: string
   score: FixtureScore
   /**
-   * Fixtures per gameweek column, so a reader can see where the score came
-   * from. One entry per column passed in, in the same order: empty is a blank,
-   * two is a double (section 6.5).
+   * Fixtures per gameweek in the horizon, so a reader can see where the score
+   * came from. Empty is a blank, two is a double (section 6.5).
    */
   fixtures: TeamFixture[][]
   /** Squad players from this club. At most three can be held (section 7.5). */
@@ -47,7 +47,6 @@ export function buildClubBlocks({
   squad,
   startGameweek,
   horizon,
-  columns,
   sort,
 }: {
   teams: FplTeam[]
@@ -55,15 +54,12 @@ export function buildClubBlocks({
   squad: Squad
   startGameweek: number
   horizon: Horizon
-  /**
-   * Gameweek columns to render. The whole season rather than just the horizon:
-   * "who should I buy" is partly a question about what comes after the run you
-   * are scoring, and it keeps the table the same shape as the Fixtures view.
-   * The score still covers the horizon alone.
-   */
-  columns: number[]
   sort: ClubSort
 }): ClubBlock[] {
+  // The horizon selects the columns, exactly as it does in the Fixtures view,
+  // so the two stay the same shape and the cells on screen are always the ones
+  // the score is computed from.
+  const columns = horizonGameweeks(startGameweek, horizon)
   // Bench players count towards the three-per-club limit just as starters do,
   // so this walks the whole fifteen rather than the starting eleven.
   const squadByClub = new Map<number, SquadPlayer[]>()

@@ -20,6 +20,26 @@ export function formatRank(rank: number | null): string {
   return rank === null ? '—' : rank.toLocaleString('en-GB')
 }
 
+/**
+ * Where a rank sits as a share of the field, e.g. rank 280,868 of 10,389,260
+ * is the top "2.7%".
+ *
+ * Rank over total, to one decimal place. Note this is the inverse framing of
+ * the Ownership view's "ahead of 97.3% of managers": same fact, and both are
+ * shown because the header answers "how am I doing" while section 7.4 answers
+ * "how much room is there above me".
+ */
+export function formatTopPercent(
+  rank: number | null,
+  totalPlayers: number
+): string {
+  if (rank === null || rank < 1 || totalPlayers < 1) {
+    return '—'
+  }
+  const percent = Math.min(100, (rank / totalPlayers) * 100)
+  return `${percent.toFixed(1)}%`
+}
+
 /** Formats a points total with an explicit sign, e.g. -4 to "-4". */
 export function formatPoints(points: number): string {
   return points.toLocaleString('en-GB')

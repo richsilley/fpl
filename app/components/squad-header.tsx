@@ -1,18 +1,26 @@
-import { formatPoints, formatRank } from '@/lib/format'
+import { formatPoints, formatRank, formatTopPercent } from '@/lib/format'
 import type { SquadManager } from '@/lib/fpl/squad'
 
 /**
- * The section 7.1 header: manager name, team name, overall rank and gameweek
- * points.
+ * The section 7.1 header: manager name, team name, and the four figures that
+ * place the squad — gameweek points, season points, overall rank, and where
+ * that rank sits as a share of the field.
  *
- * Rank and points are for the gameweek shown, not live values, so the gameweek
- * is named in the points label to make that unambiguous.
+ * All four describe the gameweek shown, not live values, which is why the
+ * gameweek is named in the points label.
  *
  * Narrow layout stacks the identity above the stats. From `sm` the two sit on
  * one line with the stats pushed right, so the card still reads as one bar at
  * desktop width rather than leaving a long empty gutter.
  */
-export function SquadHeader({ manager }: { manager: SquadManager }) {
+export function SquadHeader({
+  manager,
+  totalPlayers,
+}: {
+  manager: SquadManager
+  /** Total FPL entries: the denominator for the top-percentage figure. */
+  totalPlayers: number
+}) {
   return (
     <header className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="min-w-0">
@@ -25,10 +33,18 @@ export function SquadHeader({ manager }: { manager: SquadManager }) {
       </div>
 
       <dl className="grid shrink-0 grid-cols-2 gap-3 sm:flex sm:gap-4">
-        <Stat label="Overall rank" value={formatRank(manager.overallRank)} />
         <Stat
           label={`GW${manager.gameweek} points`}
           value={formatPoints(manager.gameweekPoints)}
+        />
+        <Stat
+          label="Overall points"
+          value={formatPoints(manager.overallPoints)}
+        />
+        <Stat label="Overall rank" value={formatRank(manager.overallRank)} />
+        <Stat
+          label="Top"
+          value={formatTopPercent(manager.overallRank, totalPlayers)}
         />
       </dl>
     </header>
@@ -37,7 +53,7 @@ export function SquadHeader({ manager }: { manager: SquadManager }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-neutral-50 px-3 py-2 dark:bg-neutral-800/50 sm:min-w-[8.5rem]">
+    <div className="rounded-md bg-neutral-50 px-3 py-2 dark:bg-neutral-800/50 sm:min-w-[7rem]">
       <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         {label}
       </dt>
