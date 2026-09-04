@@ -1,8 +1,8 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.8
+**Version:** 1.9
 **Date:** 4 September 2026
-**Status:** Approved for build. Steps 1 to 6 of the build order are complete
+**Status:** Built. All seven build order steps are complete; v1 is feature complete
 
 ---
 
@@ -15,7 +15,7 @@ The core insight: an FPL squad is a table with fifteen rows. Every useful questi
 ## 2. Goals
 
 - Load any squad from a manager ID with no account or login
-- Answer three distinct questions from one interface
+- Answer four distinct questions from one interface, one per view
 - Cost nothing to run at small-to-moderate scale
 - Be shareable by URL, so a mini league adopts it organically
 - Work on mobile
@@ -57,7 +57,7 @@ All data comes from the undocumented public FPL API at `https://fantasy.premierl
 
 ### 5.2 Internal routes
 
-The app does not expose the FPL API directly. Each upstream endpoint is proxied by a server-side route, which is where caching, headers and error translation live.
+The app does not expose the FPL API directly. Upstream calls go through a server-side data layer, which is where the user-agent header, caching and error translation live. Four of the five endpoints also have a route handler in front of them, for any client-side caller.
 
 | Internal route | Upstream |
 |---|---|
@@ -65,6 +65,10 @@ The app does not expose the FPL API directly. Each upstream endpoint is proxied 
 | `GET /api/fixtures` | `fixtures/` |
 | `GET /api/picks/{id}?gw=` | `entry/{id}/event/{gw}/picks/` |
 | `GET /api/league/{id}?page=` | `leagues-classic/{id}/standings/` |
+
+**`entry/{id}/` has no route handler.** It is reached only through the data layer, because nothing client-side needs it: it supplies the manager and team names for the section 7.1 header and the manager's own leagues for section 7.4, both of which are rendered on the server. Add a route for it when something in the browser needs it, not before.
+
+Views render on the server and call the data layer directly rather than fetching these routes over HTTP. See 8.1.
 
 ### 5.3 Bootstrap projection
 
@@ -268,11 +272,25 @@ Columns: global ownership %, reference population ownership %, and the differenc
 
 **League size cap: 50 managers.** A mini league requires one API call per manager. Fetch the top 50 by current league rank and no more. If the league is larger, show a notice stating that the comparison covers the top 50 only. Cache all fetched squads for the remainder of the gameweek.
 
-#### 7.4.1 Global mode as built
+#### 7.4.1 As built
 
-Build step 6 delivered the global population only. The league and rival populations are step 7 and change the denominator, not the presentation.
+All three populations are built. `compareOwnership` is the one function section 7.4 asks for: it takes a population and returns a row per player, and never asks which mode it is in. The three loaders differ only in how they arrive at an ownership lookup and a rank, which is the "only the denominator changes" the section describes.
 
-In global mode the reference population *is* the global one, so the three columns above collapse: reference ownership would repeat the global figure and the difference would always be zero. Rendering two dead columns would be worse than not rendering them. Global mode therefore shows ownership and the flag, and the second and third columns arrive with the populations that give them meaning.
+**Global mode still shows two columns, not four.** The reference population *is* the global one, so reference ownership would repeat the global figure and the difference would always be zero. Rendering two dead columns would be worse than not rendering them. The comparison columns appear in league and rival modes, where they mean something.
+
+**Fetching cost and why the cap exists.** A single `picks/` call takes well over a second, so fifty in series would be well over a minute. They run eight at a time: fifty squads land in about six seconds cold, and under a second and a half once cached. Each manager's picks are cached for the rest of the gameweek by the same rule as the user's own (8.3), so that cost falls once per league per gameweek, not once per page view.
+
+**The fan-out is streamed.** The squad header, tabs and population selector render immediately and the table arrives when the fan-out completes, rather than the whole page waiting. The page also raises its execution ceiling above the platform default, which a cold fifty-squad load would otherwise exceed.
+
+**A failed squad shrinks the population, it does not break the view.** One manager's picks failing, for instance because they joined the league after the gameweek, is reported in the notice and excluded from the denominator. Only a total failure is an error.
+
+**The manager counts in their own league's population.** The figure is meant to be that league's ownership, and leaving one squad out would make it neither the league's nor anyone else's.
+
+**Rival mode is a population of one,** so ownership is 0 or 100 and the difference against global carries the whole signal. The cell reads as owned or not rather than as a percentage; the calculation is unchanged, only the wording. Ahead or behind is decided on overall rank, since a two-manager population has no other ordering.
+
+**Rank is taken within the compared group, not the whole league.** On a league larger than the cap the manager may sit outside the top 50, in which case there is no ahead-or-behind call to make and the flag says so rather than guessing.
+
+**The manager's own leagues are offered directly.** The entry payload already carries them (5.1), so requiring a league ID for a league they are in would be a pointless step. Only leagues people actually created are listed: FPL enrols everyone into global ones, and comparing against a few million managers is what global mode already does.
 
 **Flags, not raw percentages alone.** The question in 7.4 is comparative, so ownership is banded: Template at 40% and above, Popular 15 to 40, Low 5 to 15, Differential below 5. The percentage is still shown, with a bar scaled to 100 rather than to the highest value in the squad, so a player looks the same in every squad.
 
@@ -352,6 +370,9 @@ This makes every view shareable by construction and removes the need for account
 | `horizon` | Any integer from 1 to the gameweeks remaining in the season | `5` |
 | `sort` | Club Blocks ordering: `score`, `club` or `owned`, each `-asc` or `-desc` | `score-desc` |
 | `league` | League ID | None. Ownership falls back to global mode |
+| `rival` | Manager ID of a single rival | None. Ownership falls back to global mode |
+
+`league` and `rival` select the Ownership view's reference population, so they are mutually exclusive. The population selector always sets one and clears the other. A hand-edited URL carrying both resolves to `league`.
 
 `?id=1234567` alone must land on the fixtures view at a 5-gameweek horizon. Nobody should need to type a `view` parameter to reach the main function of the app.
 
@@ -375,6 +396,13 @@ Required, both for performance and to avoid placing load on FPL's servers.
 | `fixtures` | 24 hours | Changes rarely |
 | A manager's `picks` | Rest of gameweek | Immutable once the deadline passes |
 | League standings | 1 hour | Updates during and after matches |
+| `entry/{id}/` | 1 hour | Not in the original table. Only the manager name, team name and league list are read from it, and none of those change in practice; this matches the standings duration rather than inventing a longer one |
+
+**"Rest of gameweek" is computed, not fixed.** It is the time remaining until the next deadline, since that is when a manager's picks can next change. A stale deadline can only shorten it, never extend it past the next one.
+
+**The picks duration is what makes league mode affordable.** The same cache serves the user's own squad and every squad fetched for a mini-league comparison, so a fifty-manager league costs fifty calls once per gameweek rather than once per page view. See 7.4.1.
+
+**Nothing that failed is cached.** Only successful responses are stored, so an outage around a deadline is retried rather than served from cache for the next hour. See 8.6.
 
 ### 8.4 Cost
 
@@ -405,6 +433,32 @@ The frozen first column with horizontal scroll is the core pattern at all widths
 
 Mobile becomes the primary surface once the tool is shared beyond the author, since most people check FPL on a phone. The layout should not need rebuilding when that happens.
 
+### 8.6 Errors
+
+Section 7.1 asks for a clear error state. This is the contract behind it, shared by the route handlers and the views so both describe a failure the same way.
+
+Every failure is classified into one of these, rather than surfacing a raw upstream status:
+
+| Code | HTTP | Means |
+|---|---|---|
+| `bad_request` | 400 | The ID was not a positive whole number |
+| `not_found` | 404 | No such manager, league or gameweek |
+| `picks_not_yet_available` | 409 | The gameweek's deadline has not passed. See constraint 3 |
+| `forbidden` | 502 | The FPL API rejected the request, most likely the user-agent check |
+| `unavailable` | 503 | The FPL API is erroring, or returned something that is not JSON |
+| `network` | 503 | The FPL API could not be reached |
+| `timeout` | 504 | The FPL API did not answer in time |
+
+Route handlers return `{ error: { code, message } }`.
+
+**`picks_not_yet_available` exists because FPL returns 404 for two different things.** Without it, a user with a perfectly good ID is told to check it. See constraint 3.
+
+**Error responses are never cached**, at any layer. An outage around a deadline must not be served for the following hour, and a user retrying must actually retry.
+
+**The message says what went wrong; the view says what to do about it.** A wrong ID is the reader's to fix, a closed gameweek needs waiting out, an outage needs retrying. Keeping the two apart means the data layer does not have to guess who is reading.
+
+**Failures inside a fan-out are not view failures.** In league mode a squad that cannot be loaded is dropped from the population and reported in the notice; only a total failure is an error. See 7.4.1.
+
 ## 9. Build order
 
 1. ~~Server-side API routes with caching and correct headers~~ **Done**
@@ -413,7 +467,7 @@ Mobile becomes the primary surface once the tool is shared beyond the author, si
 4. ~~Club Blocks view (reuses the fixture data already fetched)~~ **Done**
 5. ~~Form view (no new data required; `bootstrap-static` is already loaded)~~ **Done**
 6. ~~Ownership view, global mode only~~ **Done**
-7. Ownership view, league and rival modes
+7. ~~Ownership view, league and rival modes~~ **Done**
 
 Steps 1 to 3 constitute a genuinely useful tool on their own. Ship there if needed.
 
@@ -421,7 +475,7 @@ Step 5 needed no new fetching and no new fields: every column in 7.3 was already
 
 Step 6 needed no new fetching either: global ownership is `selected_by_percent`, and the direction flag's denominator is `total_players`, both already in the projection.
 
-Step 7 is the first to need new fetching, and the first to need a per-manager fan-out. See the 50-manager cap in 7.4 and the caching row for picks in 8.3. It is also the first step where the reference-population columns in 7.4 become meaningful, so it adds columns to the Ownership view rather than only a mode selector. See 7.4.1.
+Step 7 was the first to need new fetching and the first per-manager fan-out. See 7.4.1 for how the cap, concurrency, caching and streaming interact; the 50-manager cap in 7.4 and the picks caching row in 8.3 are what make it affordable.
 
 ## 10. Deferred to v2
 
@@ -447,3 +501,5 @@ All three v1 open questions are now closed.
 3. Blank and double logic cannot be tested against live data until cup postponements are confirmed, typically from GW18. **Partly mitigated:** the logic has been verified against synthetic fixture data covering a blank, a double, an unscheduled fixture with a null `event`, and a double taking the score above 10. It remains unverified against real postponements
 4. There is no automated test suite. The verifications above were run through a temporary route and then deleted, so they do not protect against regression. Section 6 arithmetic, the blank and double handling, and the status-code mapping in 7.3 are the parts most worth covering if one is added
 5. Most squads have no unavailable players, so the availability states in 7.3 will not appear in casual testing. The rendering was verified against a squad holding one loaned-out player and one 50% doubt, found by scanning the overall league. Re-check against a real flagged squad after any change to that column rather than assuming an all-available squad proves it works
+6. League mode is the only part of the app that fans out across managers, and the only place a slow or rate-limited FPL API would be felt sharply. Cold, it is fifty calls; cached, none. If FPL ever throttles bursts, the concurrency in 7.4.1 is the dial to turn down, at the cost of a slower first load
+7. Squads are cached for the rest of the gameweek, which is correct for picks but means a league comparison does not reflect transfers made after it was first loaded. That is the same staleness the rest of the app accepts, and it resolves at the next deadline

@@ -33,7 +33,14 @@ import type { OwnershipRow, ReferencePopulation } from '@/lib/fpl/reference'
 
 const PLAYER_COLUMN = 'w-[9.5rem] min-w-[9.5rem] sm:w-52 sm:min-w-52'
 const OWNERSHIP_COLUMN = 'min-w-[10rem]'
-const NUMERIC_COLUMN = 'w-24 min-w-24'
+/**
+ * In a comparison mode the global column moves into the player cell below
+ * `sm`. Four columns do not fit a phone, and the two that would scroll off are
+ * the reference and the difference, which are the entire point of choosing a
+ * league or a rival. The global figure is the one that can be read anywhere.
+ */
+const GLOBAL_COLUMN_COMPARING = 'hidden sm:table-cell min-w-[10rem]'
+const NUMERIC_COLUMN = 'w-[5rem] min-w-[5rem] sm:w-24 sm:min-w-24'
 /**
  * Hidden below `sm`, where the chip rides in the player cell instead. As a
  * column it does not fit on a phone, and the flag is the point of the view, so
@@ -95,7 +102,9 @@ export function OwnershipTable({
               <th
                 scope="col"
                 title="Percentage of all FPL managers who own this player"
-                className={`border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${OWNERSHIP_COLUMN}`}
+                className={`border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${
+                  showComparison ? GLOBAL_COLUMN_COMPARING : OWNERSHIP_COLUMN
+                }`}
               >
                 {showComparison ? 'Global' : 'Owned by'}
               </th>
@@ -197,13 +206,22 @@ function PlayerRow({
             {row.player.club}
           </span>
         </span>
-        <span className="mt-0.5 flex sm:hidden">
+        <span className="mt-0.5 flex items-baseline gap-1.5 sm:hidden">
           <BandChip id={band.id} label={band.label} />
+          {/* In a comparison mode the global column is hidden at this width,
+              so the figure rides here instead. */}
+          {showComparison && (
+            <span className="text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
+              {row.globalPercent.toFixed(1)}% global
+            </span>
+          )}
         </span>
       </th>
 
       <td
-        className={`border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${OWNERSHIP_COLUMN}`}
+        className={`border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${
+          showComparison ? GLOBAL_COLUMN_COMPARING : OWNERSHIP_COLUMN
+        }`}
       >
         <OwnershipBar percent={row.globalPercent} />
       </td>

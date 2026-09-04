@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.8; steps 1–6 of the build order complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.8; all seven build order steps complete).
 
 ## What this is
 
@@ -44,7 +44,10 @@ team name; `picks/` has neither. §8.3 doesn't list it, so it's cached 1h.
 
 Errors return `{ error: { code, message } }` with `Cache-Control: no-store`.
 Codes: `bad_request` 400, `not_found` 404, `picks_not_yet_available` 409,
-`forbidden` 502, `unavailable`/`network` 503, `timeout` 504.
+`forbidden` 502, `unavailable`/`network` 503, `timeout` 504. Full contract in
+§8.6. **Never cache a failure** — an outage at a deadline must not be served
+for the next hour. Only 200s are stored, so this is automatic for `fetch` but
+must be preserved by hand anywhere else.
 
 Caching uses the **`fetch` Data Cache**, not `use cache`/`cacheComponents`.
 `use cache` is in-memory per instance and does not survive Vercel's serverless
@@ -110,19 +113,50 @@ horizon control's GET form needs hidden `view`/`sort` inputs for the same
 reason. Invalid values fall back to defaults, never error.
 
 `view` is `fixtures` | `form` | `ownership` | `clubs`, default `fixtures`.
-`BUILT_VIEWS` gates the tabs; all four are now listed.
+`league`/`rival` pick the Ownership population and are mutually exclusive —
+the selector sets one and clears the other; both present resolves to `league`.
 
 **Carry params a view doesn't use.** Form has no horizon and hides the control,
 but the param still rides through, so switching Form → Fixtures returns to the
 horizon you left. `usesHorizon(view)` gates the control and the legend.
 
+## Module map
+
+**`lib/fpl` is the only code that talks to FPL.** Two tiers, and the split is
+load-bearing:
+
+| Server-only (`import 'server-only'`) | |
+|---|---|
+| `client.ts` | the single egress point: user-agent, timeout, cache config, error mapping |
+| `api.ts` | one function per endpoint + cache durations |
+| `projection.ts` | trims bootstrap to the 20 fields (§5.3) |
+| `squad.ts` | `loadSquad()` → the fifteen-row set |
+| `views.ts` | `loadMatrixData()` → what every view is built from |
+| `fixtures.ts` | fixture index + Fixture Score |
+| `clubs.ts` | Club Blocks rows + sorting |
+| `reference.ts` | Ownership populations + `compareOwnership()` |
+| `concurrency.ts` | the bounded fan-out for league mode |
+| `http.ts` | route-handler helpers |
+
+| Client-safe (**must not** import `server-only`) | |
+|---|---|
+| `horizon.ts` | horizon parsing/clamping, score formatting |
+| `params.ts` | URL state, `buildHref` |
+| `ownership.ts` | bands + direction flag |
+| `availability.ts` | status-code mapping |
+| `lib/format.ts` | price, rank, points |
+
+The horizon control is a Client Component and imports `params.ts`/`horizon.ts`.
+**Adding `import 'server-only'` to anything in the second table breaks the
+build.** That's why the pure helpers live apart from the modules that fetch.
+
 ## One loader for all views
 
 `loadMatrixData()` in `lib/fpl/views.ts` returns squad + fixture index + teams
-+ columns. **Both views share one fixture index**, so they can't disagree about
-a score — a club reading 6.4 in Fixtures and 6.0 in Club Blocks would be a
-visible bug. Add view-specific shaping in its own module (`lib/fpl/clubs.ts`),
-not in the loader.
++ columns + totalPlayers. **Fixtures and Club Blocks share one fixture index**,
+so they can't disagree about a score — a club reading 6.4 in one and 6.0 in the
+other would be a visible bug. Add view-specific shaping in its own module
+(`clubs.ts`, `reference.ts`), not in the loader.
 
 Shared cell/badge rendering and both colour scales live in
 `app/components/fixture-visuals.tsx`. Don't re-implement per view.
@@ -166,16 +200,25 @@ Rows are the 15 players except where noted.
    fail to "out"** — showing an unfit player as fit is the costlier error.
    Most squads are fully available, so test against a flagged one.
 3. **Ownership** — "is this player worth owning given who else owns them and where
-   I sit?" **Global mode built**; league/rival modes are the remaining step.
-   One function, three reference populations (identical calc, only the
-   denominator changes): Overall rank (`selected_by_percent`), Mini league (top
-   50 by league rank, one `picks/` call each, cache for the GW; larger leagues
-   show a top-50 notice), Single rival (one `picks/` call).
+   I sit?" **Built, all three modes.** `compareOwnership()` in
+   `lib/fpl/reference.ts` is *the* one function — it takes a population and
+   never asks which mode it's in. Only `ownershipOf` differs. **Add a fourth
+   population by writing a loader, not by branching the function.**
 
    Global mode shows ownership % + a band flag only — reference % and difference
-   would be a repeat of the global figure and a column of zeroes, so they land
-   with the populations that give them meaning. Bands: Template ≥40, Popular
-   15–40, Low 5–15, Differential <5.
+   would be a repeat of the global figure and a column of zeroes, so they only
+   appear in league/rival mode. Bands: Template ≥40, Popular 15–40, Low 5–15,
+   Differential <5.
+
+   **League mode is the app's only fan-out.** Top 50 by league rank, 8 `picks/`
+   calls in flight (`PICKS_CONCURRENCY`) — a single call is >1s, so 50 in series
+   would be 90s. ~6s cold, ~1.4s cached. Wrapped in `<Suspense>` and the page
+   sets `maxDuration = 60`; without both, a cold load blanks the page and can
+   exceed the platform default. Failed squads shrink the denominator and are
+   reported, they don't break the view. You count in your own league's numbers.
+
+   Rank is taken **within the compared group**, not the whole league — on a big
+   league you may sit outside the top 50, and then there's no ahead/behind call.
 
    **Never colour the bands good/bad.** Ahead of the field a differential is a
    risk; behind, it's how you close the gap. Same player, opposite meaning — so
@@ -187,10 +230,7 @@ Rows are the 15 players except where noted.
    horizon, sortable (default highest first). Owned count per club with an
    amber "3 max" badge at the three-per-club limit.
 
-Build order: (1) API routes ✅, (2) squad loading ✅, (3) Fixtures ✅,
-(4) Club Blocks ✅, (5) Form ✅, (6) Ownership global ✅, (7) Ownership
-league/rival — **the only step left**, and the first needing new fetching
-(one `picks/` call per manager, capped at 50).
+Build order: all seven steps complete. Remaining work is v2 (§10).
 
 ## Fixture Score
 
