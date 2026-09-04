@@ -28,6 +28,12 @@ export function formatRank(rank: number | null): string {
  * the Ownership view's "ahead of 97.3% of managers": same fact, and both are
  * shown because the header answers "how am I doing" while section 7.4 answers
  * "how much room is there above me".
+ *
+ * **Floored at 0.1%.** One decimal runs out of resolution at about rank 5,200
+ * in a field of ten million, and every rank above that rounded to "0.0%",
+ * which reads as missing data rather than as the best possible answer. 0.1% is
+ * the smallest figure this scale can honestly express, so it is where it
+ * stops; the exact standing is in the rank beside it.
  */
 export function formatTopPercent(
   rank: number | null,
@@ -37,7 +43,7 @@ export function formatTopPercent(
     return '—'
   }
   const percent = Math.min(100, (rank / totalPlayers) * 100)
-  return `${percent.toFixed(1)}%`
+  return `${Math.max(0.1, percent).toFixed(1)}%`
 }
 
 /** Formats a points total with an explicit sign, e.g. -4 to "-4". */

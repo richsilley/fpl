@@ -5,6 +5,7 @@ import { MAX_PLAYERS_PER_CLUB, type ClubBlock } from '@/lib/fpl/clubs'
 import { horizonGameweeks, type Horizon } from '@/lib/fpl/fixtures'
 import {
   buildHref,
+  type CarriedState,
   nextClubSort,
   splitClubSort,
   type ClubSort,
@@ -50,12 +51,15 @@ export function ClubBlocksTable({
   horizon,
   startGameweek,
   sort,
+  carry,
 }: {
   blocks: ClubBlock[]
   managerId: string
   horizon: Horizon
   startGameweek: number
   sort: ClubSort
+  /** Ownership population and view-as target, carried untouched (section 8.2). */
+  carry: CarriedState
 }) {
   // The horizon selects the columns, matching the Fixtures view: choosing five
   // gameweeks shows five columns, and the cells on screen are exactly the ones
@@ -71,6 +75,7 @@ export function ClubBlocksTable({
       view: 'clubs',
       horizon,
       sort: nextClubSort(field, sort),
+      ...carry,
     })
 
   return (

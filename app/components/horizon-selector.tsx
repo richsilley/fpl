@@ -6,7 +6,12 @@ import { useState } from 'react'
 // From ./horizon and ./params rather than ./fixtures: this is a Client
 // Component, and fixtures.ts is `server-only`.
 import { HORIZON_PRESETS, type Horizon } from '@/lib/fpl/horizon'
-import { buildHref, type ViewId } from '@/lib/fpl/params'
+import {
+  buildHref,
+  carriedFields,
+  type CarriedState,
+  type ViewId,
+} from '@/lib/fpl/params'
 
 /**
  * The horizon control (section 7.6), shared with Club Blocks when that lands.
@@ -33,8 +38,7 @@ export function HorizonSelector({
   maxHorizon,
   view,
   sort,
-  league,
-  rival,
+  carry,
 }: {
   managerId: string
   horizon: Horizon
@@ -45,8 +49,8 @@ export function HorizonSelector({
   /** Carried through so changing the horizon keeps the Club Blocks sort. */
   sort: string | null
   /** Carried through so it survives too (section 8.2). */
-  league: string | null
-  rival: string | null
+  /** Ownership population and view-as target, carried untouched (section 8.2). */
+  carry: CarriedState
 }) {
   // Mirrors the input so the highlight can follow what is typed, rather than
   // only what has been applied. Seeded from the applied horizon; the caller
@@ -55,7 +59,7 @@ export function HorizonSelector({
   const [draft, setDraft] = useState(String(horizon))
 
   const href = (value: number) =>
-    buildHref({ id: managerId, view, horizon: value, sort, league, rival })
+    buildHref({ id: managerId, view, horizon: value, sort, ...carry })
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -120,11 +124,17 @@ export function HorizonSelector({
           {/* A GET form submits only its own fields, so the rest of the URL
               state has to ride along or applying a horizon would bounce the
               reader back to the default view and sort. */}
-          <input type="hidden" name="id" value={managerId} />
-          <input type="hidden" name="view" value={view} />
-          {sort && <input type="hidden" name="sort" value={sort} />}
-          {league && <input type="hidden" name="league" value={league} />}
-          {rival && <input type="hidden" name="rival" value={rival} />}
+          {carriedFields({ id: managerId, view, sort, ...carry })
+            // The number input writes this one itself.
+            .filter((field) => field.name !== 'horizon')
+            .map((field) => (
+              <input
+                key={field.name}
+                type="hidden"
+                name={field.name}
+                value={field.value}
+              />
+            ))}
           <label htmlFor="horizon" className="sr-only">
             Custom horizon, 1 to {maxHorizon} gameweeks
           </label>

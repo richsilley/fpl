@@ -6,15 +6,19 @@ import { FormTable } from '@/app/components/form-table'
 import { HorizonSelector } from '@/app/components/horizon-selector'
 import { Suspense } from 'react'
 
+import Link from 'next/link'
+
 import { ManagerIdForm } from '@/app/components/manager-id-form'
 import { OwnershipModeSelector } from '@/app/components/ownership-mode-selector'
 import { OwnershipTable } from '@/app/components/ownership-table'
 import { SquadHeader } from '@/app/components/squad-header'
+import { ViewAsSelector } from '@/app/components/view-as-selector'
 import { ViewTabs } from '@/app/components/view-tabs'
 import { buildClubBlocks } from '@/lib/fpl/clubs'
 import { FplApiError } from '@/lib/fpl/errors'
 import { parseHorizon, type Horizon } from '@/lib/fpl/fixtures'
 import {
+  buildHref,
   ownershipModeOf,
   parseClubSort,
   parseEntityId,
@@ -22,6 +26,8 @@ import {
   parseView,
   usesHorizon,
   VIEW_LABELS,
+  withoutViewAs,
+  type CarriedState,
   type ClubSort,
   type ViewId,
 } from '@/lib/fpl/params'
@@ -37,7 +43,7 @@ import {
   type ReferenceMode,
   type ReferencePopulation,
 } from '@/lib/fpl/reference'
-import type { Squad } from '@/lib/fpl/squad'
+import { loadManagerLeagues, type Squad } from '@/lib/fpl/squad'
 import { loadMatrixData, type MatrixData } from '@/lib/fpl/views'
 
 /**
@@ -91,6 +97,8 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const sort = parseClubSort(rawSort)
   const leagueId = parseEntityId(first(params.league))
   const rivalId = parseEntityId(first(params.rival))
+  const asId = parseEntityId(first(params.as))
+  const asLeagueId = parseEntityId(first(params.asleague))
   // An unparseable league or rival ID falls back to global rather than
   // erroring, per section 8.2.
   const ownershipMode = ownershipModeOf(
@@ -124,6 +132,8 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             ownershipMode={ownershipMode}
             leagueId={leagueId}
             rivalId={rivalId}
+            asId={asId}
+            asLeagueId={asLeagueId}
           />
         ) : (
           <EmptyState />
@@ -142,6 +152,8 @@ async function MatrixSection({
   ownershipMode,
   leagueId,
   rivalId,
+  asId,
+  asLeagueId,
 }: {
   managerId: string
   view: ViewId
@@ -152,10 +164,28 @@ async function MatrixSection({
   ownershipMode: ReferenceMode
   leagueId: number | null
   rivalId: number | null
+  /** Manager being viewed as, when it is not the one in `id`. */
+  asId: number | null
+  /** League the view-as picker is listing. */
+  asLeagueId: number | null
 }) {
+  const myId = parseManagerId(managerId)
+  // Viewing as yourself is the same as not viewing as anyone. Collapsing it
+  // here means the rest of the page has one question to ask, not two, and a
+  // hand-edited `as=` holding your own ID cannot produce a "Back to my team"
+  // button that goes nowhere.
+  const viewedId = asId !== null && asId !== myId ? asId : null
+
+  const carry: CarriedState = {
+    league: leagueId === null ? null : String(leagueId),
+    rival: rivalId === null ? null : String(rivalId),
+    as: viewedId === null ? null : String(viewedId),
+    asLeague: asLeagueId === null ? null : String(asLeagueId),
+  }
+
   let data: MatrixData
   try {
-    data = await loadMatrixData(parseManagerId(managerId), horizon)
+    data = await loadMatrixData(viewedId ?? myId, horizon)
   } catch (error) {
     const fplError =
       error instanceof FplApiError
@@ -170,7 +200,28 @@ async function MatrixSection({
       console.error('[matrix] unexpected error', error)
     }
 
-    return <ErrorNotice kind={fplError.kind} message={fplError.message} />
+    return (
+      <div className="space-y-4">
+        <ErrorNotice kind={fplError.kind} message={fplError.message} />
+        {/* A borrowed squad that will not load must not strand the reader on
+            an error page with no way back to their own. */}
+        {viewedId !== null && (
+          <Link
+            href={buildHref({
+              id: managerId,
+              view,
+              horizon,
+              sort: rawSort,
+              ...withoutViewAs(carry),
+            })}
+            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:border-neutral-200 dark:bg-neutral-100 dark:text-neutral-900"
+          >
+            <span aria-hidden>&larr;</span>
+            Back to my team
+          </Link>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -180,13 +231,32 @@ async function MatrixSection({
         totalPlayers={data.totalPlayers}
       />
 
+      {/* Whose squad you are looking at outranks which columns you are
+          looking at, so this sits above the tabs and stays on all four views.
+          Its own boundary: the league list is a cached call, and a slow one
+          must not hold up the squad that is already loaded. */}
+      <Suspense
+        key={`viewas-${asLeagueId ?? 'none'}-${viewedId ?? 'me'}`}
+        fallback={<ViewAsPlaceholder />}
+      >
+        <ViewAsSection
+          managerId={managerId}
+          myId={myId}
+          viewedManager={viewedId === null ? null : data.squad.manager}
+          asLeagueId={asLeagueId}
+          view={view}
+          horizon={data.horizon}
+          sort={rawSort}
+          carry={carry}
+        />
+      </Suspense>
+
       <ViewTabs
         managerId={managerId}
         view={view}
         horizon={data.horizon}
         sort={rawSort}
-        league={leagueId === null ? null : String(leagueId)}
-        rival={rivalId === null ? null : String(rivalId)}
+        carry={carry}
       />
 
       <section className="space-y-4">
@@ -216,8 +286,7 @@ async function MatrixSection({
               maxHorizon={data.maxHorizon}
               view={view}
               sort={rawSort}
-              league={leagueId === null ? null : String(leagueId)}
-              rival={rivalId === null ? null : String(rivalId)}
+              carry={carry}
             />
           )}
         </div>
@@ -236,6 +305,7 @@ async function MatrixSection({
             horizon={data.horizon}
             startGameweek={data.startGameweek}
             sort={sort}
+            carry={carry}
           />
         ) : view === 'form' ? (
           <FormTable
@@ -243,8 +313,7 @@ async function MatrixSection({
             managerId={managerId}
             sort={parseFormSort(rawSort ?? undefined)}
             horizon={data.horizon}
-            league={leagueId === null ? null : String(leagueId)}
-            rival={rivalId === null ? null : String(rivalId)}
+            carry={carry}
           />
         ) : view === 'ownership' ? (
           <>
@@ -264,6 +333,7 @@ async function MatrixSection({
                   horizon={data.horizon}
                   sort={sort}
                   members={null}
+                  carry={carry}
                 />
               }
             >
@@ -275,6 +345,7 @@ async function MatrixSection({
                 rivalId={rivalId}
                 horizon={data.horizon}
                 sort={sort}
+                carry={carry}
               />
             </Suspense>
             {/* The league population is one picks call per manager, up to
@@ -309,6 +380,88 @@ async function MatrixSection({
 }
 
 /**
+ * The view-as picker, with the user's own leagues and the chosen league's
+ * managers.
+ *
+ * The leagues have to come from the user's entry rather than from the squad on
+ * screen: while a rival's squad is loaded, `data.squad.manager` is *theirs*,
+ * and reading the list off it would quietly swap your leagues for the borrowed
+ * manager's the moment you used the control. `getEntry` is cached, and when
+ * you are viewing your own team this is the same call `loadSquad` just made.
+ *
+ * Neither fetch is worth an error panel. Losing the picker leaves every view
+ * working, so a failure degrades to no picker rather than to no page.
+ */
+async function ViewAsSection({
+  managerId,
+  myId,
+  viewedManager,
+  asLeagueId,
+  view,
+  horizon,
+  sort,
+  carry,
+}: {
+  managerId: string
+  myId: number
+  /** The borrowed squad's manager, or null when viewing your own. */
+  viewedManager: Squad['manager'] | null
+  asLeagueId: number | null
+  view: ViewId
+  horizon: Horizon
+  sort: string | null
+  carry: CarriedState
+}) {
+  let leagues: Squad['manager']['leagues'] = []
+  try {
+    leagues = await loadManagerLeagues(myId)
+  } catch (error) {
+    console.error('[viewas] could not load leagues', error)
+    return null
+  }
+
+  let members: LeagueMember[] | null = null
+  if (asLeagueId !== null) {
+    try {
+      // Your own team is excluded: "view as" only means someone else.
+      members = await leagueMembers(asLeagueId, myId)
+    } catch (error) {
+      console.error('[viewas] could not load league members', error)
+    }
+  }
+
+  return (
+    <ViewAsSelector
+      managerId={managerId}
+      leagues={leagues}
+      members={members}
+      viewingAs={
+        viewedManager === null
+          ? null
+          : { id: viewedManager.id, teamName: viewedManager.teamName }
+      }
+      view={view}
+      horizon={horizon}
+      sort={sort}
+      carry={carry}
+    />
+  )
+}
+
+/**
+ * Holds the picker's height while its league list loads, so the tabs and table
+ * below it do not jump once it arrives.
+ */
+function ViewAsPlaceholder() {
+  return (
+    <div
+      aria-hidden
+      className="h-[4.75rem] rounded-lg border border-dashed border-neutral-200 dark:border-neutral-800"
+    />
+  )
+}
+
+/**
  * The population selector, with the selected league's managers loaded for the
  * rival dropdown.
  *
@@ -325,6 +478,7 @@ async function ModeSelectorSection({
   rivalId,
   horizon,
   sort,
+  carry,
 }: {
   managerId: string
   manager: Squad['manager']
@@ -333,6 +487,7 @@ async function ModeSelectorSection({
   rivalId: number | null
   horizon: Horizon
   sort: ClubSort
+  carry: CarriedState
 }) {
   let members: LeagueMember[] | null = null
   if (leagueId !== null) {
@@ -353,6 +508,7 @@ async function ModeSelectorSection({
       horizon={horizon}
       sort={sort}
       members={members}
+      carry={carry}
     />
   )
 }

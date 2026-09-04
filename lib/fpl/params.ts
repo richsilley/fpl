@@ -241,6 +241,39 @@ export type AppState = {
   league?: string | null
   /** Single-rival population for the Ownership view (section 7.4). */
   rival?: string | null
+  /**
+   * Manager whose squad is on screen, when it is not the one in `id`.
+   *
+   * `id` stays the user's own team throughout, which is what makes reverting a
+   * single link and keeps the league list in the picker theirs rather than the
+   * borrowed squad's.
+   */
+  as?: string | null
+  /** Which league the view-as picker is listing. See `as`. */
+  asLeague?: string | null
+}
+
+/**
+ * The parameters every control passes through untouched.
+ *
+ * Section 8.2 requires each control to carry the whole state, or changing the
+ * horizon silently drops the population you were comparing against. Threading
+ * these one prop at a time worked at two and stopped scaling at four, and the
+ * failure is silent: a forgotten prop does not break the build, it just loses
+ * the parameter on one particular click. Passing them as one object means a
+ * control cannot carry half of them.
+ *
+ * `view`, `horizon` and `sort` are deliberately *not* here: each is set by
+ * some control, so they stay explicit at the call site.
+ */
+export type CarriedState = Pick<
+  AppState,
+  'league' | 'rival' | 'as' | 'asLeague'
+>
+
+/** Drops the view-as target, and the league list that fed it. */
+export function withoutViewAs(carry: CarriedState): CarriedState {
+  return { ...carry, as: null, asLeague: null }
 }
 
 /**
@@ -256,6 +289,8 @@ export function buildHref({
   sort,
   league,
   rival,
+  as,
+  asLeague,
 }: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
@@ -278,5 +313,27 @@ export function buildHref({
   if (rival) {
     params.set('rival', rival)
   }
+  if (as) {
+    params.set('as', as)
+  }
+  if (asLeague) {
+    params.set('asleague', asLeague)
+  }
   return `/?${params.toString()}`
+}
+
+/**
+ * The hidden fields a GET form needs to preserve state a `buildHref` link
+ * would have carried.
+ *
+ * A form only submits its own controls, so anything not represented here is
+ * dropped on submit. Values at their default are still written: harmless in a
+ * form, and cheaper than teaching the caller which ones matter.
+ */
+export function carriedFields(
+  state: AppState
+): { name: string; value: string }[] {
+  const href = buildHref(state)
+  const params = new URLSearchParams(href.slice(href.indexOf('?') + 1))
+  return [...params.entries()].map(([name, value]) => ({ name, value }))
 }

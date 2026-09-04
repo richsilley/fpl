@@ -10,6 +10,7 @@ import { defconRatio, defconThreshold, formatDefcon } from '@/lib/fpl/defcon'
 import type { Horizon } from '@/lib/fpl/horizon'
 import {
   buildHref,
+  type CarriedState,
   nextFormSort,
   splitFormSort,
   type FormSort,
@@ -55,15 +56,14 @@ export function FormTable({
   managerId,
   sort,
   horizon,
-  league,
-  rival,
+  carry,
 }: {
   squad: Squad
   managerId: string
   sort: FormSort
   horizon: Horizon
-  league: string | null
-  rival: string | null
+  /** Ownership population and view-as target, carried untouched (section 8.2). */
+  carry: CarriedState
 }) {
   const all = [...squad.startingXi, ...squad.bench]
   const scales = barScales(all, squad.manager.gameweek)
@@ -75,8 +75,7 @@ export function FormTable({
       view: 'form',
       horizon,
       sort: nextFormSort(field, sort),
-      league,
-      rival,
+      ...carry,
     })
 
   // Sorting happens inside each group, so the starting XI and the bench stay

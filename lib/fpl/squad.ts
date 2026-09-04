@@ -2,7 +2,7 @@ import 'server-only'
 
 import { currentGameweek, getBootstrap, getEntry, getPicks } from './api'
 import { FplApiError } from './errors'
-import type { FplBootstrap, FplElement } from './types'
+import type { FplBootstrap, FplElement, FplEntry } from './types'
 
 /**
  * Loads a manager's fifteen players and joins them to the player, club and
@@ -71,6 +71,8 @@ export type SquadManager = {
   overallRank: number | null
   /** Points scored in the gameweek shown. */
   gameweekPoints: number
+  /** Rank for that gameweek alone. Null until the gameweek is scored. */
+  gameweekRank: number | null
   /** Season points total as at the gameweek shown. */
   overallPoints: number
   gameweek: number
@@ -132,20 +134,46 @@ export async function loadSquad(managerId: number): Promise<Squad> {
       // gameweek whose squad is on screen.
       overallRank: picks.entry_history.overall_rank,
       gameweekPoints: picks.entry_history.points,
+      gameweekRank: picks.entry_history.rank,
       overallPoints: picks.entry_history.total_points,
       gameweek,
-      leagues: (entry.leagues?.classic ?? [])
-        // `x` is a league someone created. `s` is one FPL enrolled them into.
-        .filter((league) => league.league_type === 'x')
-        .map((league) => ({
-          id: league.id,
-          name: league.name,
-          size: league.rank_count,
-        })),
+      leagues: classicLeagues(entry),
     },
     startingXi: players.filter((player) => player.squadPosition <= 11),
     bench: players.filter((player) => player.squadPosition > 11),
   }
+}
+
+/**
+ * The leagues a manager actually joined, as both the Ownership view and the
+ * view-as picker offer them.
+ *
+ * FPL enrols everyone into global leagues (Overall, their country, sponsors)
+ * and marks those `s`. Only `x`, the ones people create, are useful here:
+ * comparing against a few million managers is what global mode already does,
+ * and no one wants to pick a rival out of a list of three million.
+ */
+export function classicLeagues(entry: FplEntry): SquadManager['leagues'] {
+  return (entry.leagues?.classic ?? [])
+    .filter((league) => league.league_type === 'x')
+    .map((league) => ({
+      id: league.id,
+      name: league.name,
+      size: league.rank_count,
+    }))
+}
+
+/**
+ * The same list for a manager whose squad is not being rendered.
+ *
+ * The view-as picker offers *your* leagues while showing someone else's squad,
+ * so it cannot read them off the loaded squad. `getEntry` is cached, and when
+ * you are viewing your own team this is the same call `loadSquad` just made.
+ */
+export async function loadManagerLeagues(
+  managerId: number
+): Promise<SquadManager['leagues']> {
+  return classicLeagues(await getEntry(managerId))
 }
 
 function toSquadPlayer(

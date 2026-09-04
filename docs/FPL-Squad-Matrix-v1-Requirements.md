@@ -1,7 +1,7 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.12
-**Date:** 4 September 2026
+**Version:** 1.13
+**Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
 ---
@@ -219,18 +219,38 @@ Distance decay, weighting nearer gameweeks more heavily than distant ones, is de
 - Fifteen players render as rows, starting XI first, bench in order
 - Clear error state if the ID is invalid or the API is unavailable
 
-**Header.** Manager name and team name, then four figures in this order:
+**Header.** Manager name and team name, then six figures in **two visually separated groups**:
 
-| Figure | Source |
+| Group | Figures |
 |---|---|
-| GW*n* points | Points scored in the gameweek shown |
-| Overall points | Season total as at that gameweek |
-| Overall rank | Rank as at that gameweek |
-| Top *x*% | Overall rank divided by total entries, to one decimal place |
+| Gameweek | GW*n* points, GW rank, Top *x*% |
+| Overall | Overall points, Overall rank, Top *x*% |
 
-All four describe the gameweek on screen rather than live values, which is why the gameweek is named in the points label. They come from the picks payload's `entry_history`, not the entry summary, so they stay consistent with the squad being shown.
+Each group carries the same three shapes — points, rank, and that rank as a share of the field — so the gameweek and the season can be read straight down against each other. Top *x*% is that group's rank divided by `total_players`, to one decimal place.
+
+**The groups need no headings, but they do need the separation.** The visible labels already say GW and Overall, so a heading would be a third level of text carrying nothing new. Without a boundary, though, six equal tiles read as one undifferentiated strip and the two "Top" figures look like a mistake. Two devices do the work together, because either alone was too weak: a rule, and a gutter several times the gap between tiles inside a group. Proximity carries most of it; the rule confirms it.
+
+All six describe the gameweek on screen rather than live values, which is why the gameweek is named in the points label. They come from the picks payload's `entry_history`, not the entry summary, so they stay consistent with the squad being shown. Between a deadline and the first kickoff this correctly reads 0 points with no rank yet.
+
+**Top *x*% is floored at 0.1%.** One decimal place runs out of resolution around rank 5,200 in a field of ten million, and everything above that rounded to "0.0%", which reads as missing data rather than as the best possible answer. 0.1% is the smallest figure the scale can honestly express, so it stops there; the exact standing is in the rank beside it.
 
 **Top *x*% is the inverse framing of the Ownership view's "ahead of *y*% of managers".** Both are shown deliberately: the header answers "how am I doing", section 7.4 answers "how much room is there above me". They should always sum to 100.
+
+#### 7.1.1 Viewing another manager's squad
+
+Any of the user's league rivals can be loaded into **all four views**, so the whole matrix can be pointed at someone else's squad.
+
+The control is a two-step cascade — **View as → from league → team** — and sits above the view tabs, because whose squad you are looking at outranks which columns you are looking at. It stays on every view: switching view keeps the borrowed squad, switching squad keeps the view.
+
+- The league dropdown lists the user's own mini leagues (5.1)
+- Choosing one lists that league's managers, ordered by league rank, **excluding the user themselves**
+- The team dropdown does not exist until a league is chosen, rather than appearing empty and disabled
+- Choosing a team loads it immediately; there is no confirm button (7.4.2)
+- A **one-press "Back to my team"** is on screen the whole time a borrowed squad is, including on the error page if that squad fails to load
+
+**A flat list of every rival was rejected.** Without the league that gives it context, a team name means nothing, and the league is what decides which managers can be fetched at all.
+
+**The user's own manager ID never leaves `id`.** The borrowed one goes in `as`. That is what makes reverting a single link with nothing to reconstruct, and it is why the league list stays the user's rather than silently becoming the borrowed manager's the moment the control is used.
 
 ### 7.2 View 1 — Fixtures
 
@@ -344,7 +364,7 @@ The comparison population is selectable:
 
 The reason is that the table must not reflow when the population changes. Three different column sets meant re-finding every column on each switch, which made comparing two populations harder than reading either one. A dash is also the honest answer: "this mode does not measure that" is a different statement from "this measures zero", and the two must not look alike.
 
-**Rival dropdown.** When a mini league is selected, offer that league's managers as a dropdown: team name with manager name, ordered by league rank, excluding the user themselves. Selecting one runs the rival comparison. **This costs no extra API call** — the standings response the league comparison already fetches carries `entry`, `player_name` and `entry_name` for every row. Hide the dropdown entirely in global mode, where there is no league to populate it from. Keep the manual rival manager ID field for rivals outside the user's leagues.
+**Rival dropdown.** When a mini league is selected, offer that league's managers as a dropdown: team name with manager name, ordered by league rank, excluding the user themselves. **Selecting one runs the comparison immediately; there is no Compare button** (7.4.2). **This costs no extra API call** — the standings response the league comparison already fetches carries `entry`, `player_name` and `entry_name` for every row. Hide the dropdown entirely in global mode, where there is no league to populate it from. Keep the manual rival manager ID field for rivals outside the user's leagues.
 
 **Direction flag.** The app derives whether the user is ahead of or behind the reference population, using their rank within it. Ahead means differentials are a risk and convergence protects the lead. Behind means the opposite. Display this as a single line of guidance above the table, not as advice per player.
 
@@ -366,6 +386,14 @@ The legend re-orders and re-colours with the table, and states plainly that gree
 Where there is no rank to read the user against, there is no direction, and the chips stay grey. Colouring them anyway would be inventing advice.
 
 **League size cap: 50 managers.** A mini league requires one API call per manager. Fetch the top 50 by current league rank and no more. If the league is larger, show a notice stating that the comparison covers the top 50 only. Cache all fetched squads for the remainder of the gameweek.
+
+#### 7.4.2 Dropdowns act on selection
+
+**A dropdown loads its choice on selection. It gets no Go button.** Choosing an option from a list of teams has exactly one possible meaning, so a second press to confirm asks the reader to say the same thing twice. This applies to the rival dropdown here and to both view-as dropdowns in 7.1.1.
+
+**Text fields keep their button.** Unlike a dropdown, a partly typed ID looks identical to a finished one, so there is no moment at which the user has unambiguously finished and nothing to act on until they say so.
+
+**It still works without JavaScript.** A select that acts on change is the one control that cannot be a plain link, so it is the second and last piece of client JavaScript in the app after the horizon control (7.6). Each one stays wrapped in a real GET form carrying the whole URL state as hidden fields, with the submit button rendered inside `<noscript>`. The no-JS path is therefore exactly the button this replaces, and 8.2's rule that every control is a link or a GET form still holds.
 
 #### 7.4.1 As built
 
@@ -470,6 +498,8 @@ This makes every view shareable by construction and removes the need for account
 | `sort` | Club Blocks: `score`/`club`/`owned`, each `-asc` or `-desc`. Form: `squad`, or `price`/`gw`/`season`/`form`/`points`/`ppg`/`mins`/`xgi` with a direction | Club Blocks `score-desc`, Form `squad` |
 | `league` | League ID | None. Ownership falls back to global mode |
 | `rival` | Manager ID of a single rival | None. Ownership falls back to global mode |
+| `as` | Manager whose squad is shown, when not `id` | None. Shows the user's own squad |
+| `asleague` | League the view-as picker is listing | None. No team dropdown yet |
 
 `league` and `rival` select the Ownership view's reference population. They are **not** mutually exclusive: a URL carrying both means "compare against this rival, chosen from this league", and `rival` is the population. `league` alone is league mode. See 7.4 for why the league is kept.
 
@@ -478,6 +508,8 @@ This makes every view shareable by construction and removes the need for account
 **Changing any control updates the URL.** This is what makes state shareable and makes the browser back button work. A link sent to someone else must reproduce exactly what the sender was looking at.
 
 **Every control must carry the whole state, not just its own parameter.** Changing the horizon must preserve the view and the sort; sorting must preserve the view and the horizon; switching view must preserve the horizon (7.6 requires this) and the sort. A control that emits only its own parameter silently resets the others, which reads as a bug and breaks the shareable-link guarantee. This applies equally to any GET form, which submits only its own fields and therefore needs the rest carried as hidden inputs.
+
+**The pass-through parameters travel as one object, not one prop at a time.** Threading them individually worked at two and stopped scaling at four, and the failure mode is silent: a forgotten prop does not break the build, it loses one parameter on one particular click. Passing them together means a control cannot carry half of them. `view`, `horizon` and `sort` stay explicit, because each is set by some control rather than only passed on.
 
 Parameters at their default value may be omitted from generated links, which keeps shared URLs short. `?id=X` is the canonical form of the default view.
 

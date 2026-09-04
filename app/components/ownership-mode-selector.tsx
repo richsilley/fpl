@@ -1,6 +1,13 @@
 import Link from 'next/link'
 
-import { buildHref, type ClubSort } from '@/lib/fpl/params'
+import { AutoSubmitSelect } from '@/app/components/auto-submit-select'
+import {
+  buildHref,
+  carriedFields,
+  type AppState,
+  type CarriedState,
+  type ClubSort,
+} from '@/lib/fpl/params'
 import type { LeagueMember, ReferenceMode } from '@/lib/fpl/reference'
 import type { SquadManager } from '@/lib/fpl/squad'
 import type { Horizon } from '@/lib/fpl/horizon'
@@ -32,6 +39,7 @@ export function OwnershipModeSelector({
   horizon,
   sort,
   members,
+  carry,
 }: {
   managerId: string
   manager: SquadManager
@@ -42,8 +50,20 @@ export function OwnershipModeSelector({
   sort: ClubSort
   /** The selected league's managers, or null when no league is selected. */
   members: LeagueMember[] | null
+  /** View-as target, passed through so every link here preserves it. */
+  carry: CarriedState
 }) {
-  const base = { id: managerId, view: 'ownership' as const, horizon, sort }
+  // `league` and `rival` are what this control sets, so they are left out of
+  // the base and written explicitly per link. The view-as target is not, so it
+  // rides along untouched.
+  const base: AppState = {
+    id: managerId,
+    view: 'ownership',
+    horizon,
+    sort,
+    as: carry.as,
+    asLeague: carry.asLeague,
+  }
   const league = leagueId === null ? undefined : String(leagueId)
 
   return (
@@ -97,10 +117,9 @@ export function OwnershipModeSelector({
           label="Rival manager ID"
           placeholder="3921581"
           current={mode === 'rival' ? rivalId : null}
-          base={base}
-          // Carried so typing a rival from outside the league does not throw
+          // Given the league, so typing a rival from outside it does not throw
           // away the league the dropdown is built from.
-          league={league}
+          base={{ ...base, league }}
         />
       </div>
     </div>
@@ -114,9 +133,11 @@ export function OwnershipModeSelector({
  * comparison already makes, whose rows carry the manager ID, team name and
  * manager name (section 5.1).
  *
- * A plain GET form with a `<select>`, like every other control here, so it
- * works with no client JavaScript. `league` rides along as a hidden field for
- * the reason in the module note above.
+ * **Choosing a manager loads the comparison; there is no Compare button.**
+ * Selecting a rival has exactly one possible meaning, so a second press to
+ * confirm it asked the reader to say the same thing twice. The `<select>` is
+ * still inside a real GET form and still has a submit button for anyone
+ * without JavaScript; see `AutoSubmitSelect`.
  */
 function RivalPicker({
   members,
@@ -126,7 +147,7 @@ function RivalPicker({
 }: {
   members: LeagueMember[]
   rivalId: number | null
-  base: { id: string; view: 'ownership'; horizon: Horizon; sort: ClubSort }
+  base: AppState
   league: string | undefined
 }) {
   if (members.length === 0) {
@@ -137,46 +158,25 @@ function RivalPicker({
     )
   }
 
-  return (
-    <form
-      action="/"
-      method="get"
-      className="flex flex-wrap items-end gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800/70"
-    >
-      <input type="hidden" name="id" value={base.id} />
-      <input type="hidden" name="view" value="ownership" />
-      <input type="hidden" name="horizon" value={String(base.horizon)} />
-      <input type="hidden" name="sort" value={base.sort} />
-      {league && <input type="hidden" name="league" value={league} />}
+  const state: AppState = { ...base, league }
 
-      <div className="min-w-0">
-        <label
-          htmlFor="rival-pick"
-          className="block text-xs font-medium text-neutral-600 dark:text-neutral-400"
-        >
-          A manager from this league
-        </label>
-        <select
-          id="rival-pick"
-          name="rival"
-          defaultValue={rivalId === null ? '' : String(rivalId)}
-          className="mt-1 w-full max-w-[22rem] rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500/30 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-        >
-          <option value="">Choose a manager…</option>
-          {members.map((member) => (
-            <option key={member.id} value={member.id}>
-              {member.teamName} — {member.managerName}
-            </option>
-          ))}
-        </select>
-      </div>
-      <button
-        type="submit"
-        className="rounded-md border border-neutral-300 px-2.5 py-1 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-      >
-        Compare
-      </button>
-    </form>
+  return (
+    <div className="border-t border-neutral-100 pt-3 dark:border-neutral-800/70">
+      <AutoSubmitSelect
+        id="rival-pick"
+        name="rival"
+        label="A manager from this league"
+        value={rivalId === null ? '' : String(rivalId)}
+        placeholder="Choose a manager…"
+        options={members.map((member) => ({
+          value: String(member.id),
+          label: `${member.teamName} — ${member.managerName}`,
+          href: buildHref({ ...state, rival: String(member.id) }),
+        }))}
+        hidden={carriedFields(state)}
+        submitLabel="Compare"
+      />
+    </div>
   )
 }
 
@@ -218,10 +218,9 @@ function ModeLink({
  * A plain GET form, so an arbitrary league or rival can be entered without any
  * client JavaScript. The hidden fields carry the rest of the URL state.
  *
- * The league form deliberately omits `rival`, so entering a new league clears
- * whichever rival was selected — a rival from the old league has no place in
- * the new one. The rival form does the opposite and keeps `league`, so the
- * dropdown survives; see the module note.
+ * These keep their button. Unlike a dropdown, a text field has no moment at
+ * which the user has unambiguously finished, so there is nothing to act on
+ * until they say so.
  */
 function IdForm({
   name,
@@ -229,24 +228,27 @@ function IdForm({
   placeholder,
   current,
   base,
-  league,
 }: {
   name: 'league' | 'rival'
   label: string
   placeholder: string
   current: number | null
-  base: { id: string; view: 'ownership'; horizon: Horizon; sort: ClubSort }
-  league?: string | undefined
+  base: AppState
 }) {
   return (
     <form action="/" method="get" className="flex items-end gap-2">
-      <input type="hidden" name="id" value={base.id} />
-      <input type="hidden" name="view" value="ownership" />
-      <input type="hidden" name="horizon" value={String(base.horizon)} />
-      <input type="hidden" name="sort" value={base.sort} />
-      {name === 'rival' && league && (
-        <input type="hidden" name="league" value={league} />
-      )}
+      {carriedFields(base)
+        // The text field writes this one itself; a hidden field of the same
+        // name would submit both values.
+        .filter((field) => field.name !== name)
+        .map((field) => (
+          <input
+            key={field.name}
+            type="hidden"
+            name={field.name}
+            value={field.value}
+          />
+        ))}
 
       <div>
         <label

@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.12; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.13; v1 feature complete).
 
 ## What this is
 
@@ -104,9 +104,26 @@ it rather than re-deriving picks.
   hydration; the browser writes §8.2's URL state itself.
 - Rank and points come from `picks.entry_history`, not the entry summary, so
   they describe the gameweek on screen.
+- Header is **two visually separated groups** — GW points/GW rank/Top%, then
+  Overall points/Overall rank/Top% — split by a rule *and* a wide gutter,
+  because either alone read as one strip of six. No headings: the labels
+  already say GW and Overall. Between a deadline and first kickoff it correctly
+  shows 0 points and dashes for rank.
+- `formatTopPercent` is **floored at 0.1%**. One decimal runs out around rank
+  5,200 of ten million, and "0.0%" read as missing data rather than as the best
+  answer there is.
 - Prices: always render via `formatPrice()` in `lib/format.ts` (constraint 4).
 - Table wrapper is `overflow-x-auto` + `sticky left-0` first column — §8.5's
   pattern, verified at 320px: page doesn't scroll, table does, column holds.
+
+**View as another manager (§7.1.1).** `loadMatrixData(as ?? id)` — every view
+renders the borrowed squad. The picker sits *above* the tabs and persists
+across all four. Its league list comes from `loadManagerLeagues(myId)`, **not**
+from `data.squad.manager`: while a rival's squad is loaded that object is
+*theirs*, so reading leagues off it would swap the user's leagues for the
+borrowed manager's. Both fetches are cached and both degrade to "no picker"
+rather than an error page. The error path keeps its own "Back to my team" link,
+or a rival whose squad won't load strands the reader.
 
 **All three fifteen-row tables share their geometry** via
 `app/components/table-metrics.ts`: header height, row height, frozen player
@@ -134,6 +151,16 @@ exclusive: `rival` wins when both are set. Both together means "this rival,
 picked from this league" — the league stays so the rival dropdown survives
 being used. Entering a league ID does clear the rival.
 
+`as`/`asleague` drive **view-as** (§7.1.1): `as` is the manager whose squad is
+rendered, `asleague` is the league its picker is listing. **`id` always stays
+the user's own team** — that is what makes "Back to my team" one link, and what
+keeps the league list theirs rather than the borrowed manager's.
+
+**Pass-through params travel as one `CarriedState` object**, not four props.
+Threading them individually failed silently: a forgotten prop loses one
+parameter on one click and the build still passes. `view`/`horizon`/`sort`
+stay explicit, since each is *set* by some control.
+
 **Carry params a view doesn't use.** Form has no horizon and hides the control,
 but the param still rides through, so switching Form → Fixtures returns to the
 horizon you left. `usesHorizon(view)` gates the control and the legend.
@@ -159,15 +186,24 @@ load-bearing:
 | Client-safe (**must not** import `server-only`) | |
 |---|---|
 | `horizon.ts` | horizon parsing/clamping, score formatting |
-| `params.ts` | URL state, `buildHref` |
+| `params.ts` | URL state, `buildHref`, `carriedFields`, `CarriedState` |
 | `ownership.ts` | bands, direction flag, strategy ordering of the bands |
 | `defcon.ts` | DefCon thresholds + bar ratio (§7.3) |
 | `availability.ts` | status-code mapping |
 | `lib/format.ts` | price, rank, points |
 
-The horizon control is a Client Component and imports `params.ts`/`horizon.ts`.
-**Adding `import 'server-only'` to anything in the second table breaks the
-build.** That's why the pure helpers live apart from the modules that fetch.
+Two Client Components import `params.ts`/`horizon.ts`: the horizon control and
+`auto-submit-select.tsx`. **Adding `import 'server-only'` to anything in the
+second table breaks the build.** That's why the pure helpers live apart from
+the modules that fetch.
+
+**Dropdowns act on selection; there is no Go button** (§7.4.2) — used by the
+view-as cascade and the Ownership rival picker. `AutoSubmitSelect` is the only
+reason a second Client Component exists: a select that reacts to change cannot
+be a plain link. It still wraps a real GET form carrying the whole state, with
+the submit button inside `<noscript>`, so the no-JS path is the button it
+replaces. **Text fields keep their button** — a half-typed ID looks like a
+finished one, so there's no moment to act on.
 
 ## One loader for all views
 

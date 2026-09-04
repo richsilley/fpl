@@ -3,6 +3,7 @@ import Link from 'next/link'
 import {
   BUILT_VIEWS,
   buildHref,
+  type CarriedState,
   VIEW_LABELS,
   type ViewId,
 } from '@/lib/fpl/params'
@@ -25,16 +26,15 @@ export function ViewTabs({
   view,
   horizon,
   sort,
-  league,
-  rival,
+  carry,
 }: {
   managerId: string
   view: ViewId
   horizon: Horizon
   sort: string | null
   /** Carried through so leaving Ownership and returning keeps the population. */
-  league: string | null
-  rival: string | null
+  /** Ownership population and view-as target, carried untouched (section 8.2). */
+  carry: CarriedState
 }) {
   return (
     <nav
@@ -51,8 +51,7 @@ export function ViewTabs({
               view: id,
               horizon,
               sort,
-              league,
-              rival,
+              ...carry,
             })}
             aria-current={selected ? 'page' : undefined}
             scroll={false}
