@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.1, approved for build).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.8; steps 1–6 of the build order complete).
 
 ## What this is
 
@@ -110,7 +110,11 @@ horizon control's GET form needs hidden `view`/`sort` inputs for the same
 reason. Invalid values fall back to defaults, never error.
 
 `view` is `fixtures` | `form` | `ownership` | `clubs`, default `fixtures`.
-`BUILT_VIEWS` gates the tabs — add to it when Form/Ownership land.
+`BUILT_VIEWS` gates the tabs; all four are now listed.
+
+**Carry params a view doesn't use.** Form has no horizon and hides the control,
+but the param still rides through, so switching Form → Fixtures returns to the
+horizon you left. `usesHorizon(view)` gates the control and the legend.
 
 ## One loader for all views
 
@@ -123,7 +127,7 @@ not in the loader.
 Shared cell/badge rendering and both colour scales live in
 `app/components/fixture-visuals.tsx`. Don't re-implement per view.
 
-## Horizon control (§7.6) — shared with Club Blocks
+## Horizon control (§7.6) — Fixtures and Club Blocks only
 
 `app/components/horizon-selector.tsx`. Presets **1/3/5/8/10** plus a numeric
 input taking any integer from 1 to gameweeks remaining. Out-of-range values
@@ -131,7 +135,7 @@ input taking any integer from 1 to gameweeks remaining. Out-of-range values
 season remainder). Reads/writes one `horizon` URL param so it survives a view
 switch — reuse this component in Club Blocks, don't fork it.
 
-**The one Client Component in the app.** §7.6 wants the preset highlight to
+**Still the only Client Component in the app.** §7.6 wants the preset highlight to
 follow what's *typed*, before submit, which is browser-only state. It degrades:
 presets are real links, the input is in a real GET form. It's keyed on
 `view.horizon` at the call site so navigation remounts it — don't reintroduce a
@@ -150,25 +154,43 @@ Rows are the 15 players except where noted.
    gameweeks (first *unfinished* → GW38), each cell = opponent + H/A, shaded by
    raw FDR. Frozen name column. Blanks = empty cells, doubles = split cells.
    Summary column shows Fixture Score over the §7.6 horizon.
-2. **Form** — "who is playing well / at risk?" Columns: price, price change this
-   GW, price change since season start, form, total points, PPG, minutes, xG, xA,
-   xGI, availability status, injury news text. Availability visually obvious: red
-   = out, amber + % = doubtful, no flag = available.
+2. **Form** — "who is playing well / at risk?" **Built.** Columns: price, price
+   change this GW, price change since season start, form, total points, PPG,
+   minutes, xG, xA, xGI, availability status, injury news text. Availability:
+   red = out, amber + % = doubtful, no flag = available.
+
+   **The flag sits in the frozen player column, not just the Status column** —
+   12 columns don't fit a phone, and a flag that scrolls off isn't "visually
+   obvious". Status code mapping is in `lib/fpl/availability.ts`: `a` available,
+   `d` doubtful, everything else (`i`/`s`/`u`/`n`/unknown) out. **Unknown codes
+   fail to "out"** — showing an unfit player as fit is the costlier error.
+   Most squads are fully available, so test against a flagged one.
 3. **Ownership** — "is this player worth owning given who else owns them and where
-   I sit?" One function, three reference populations (identical calc, only the
+   I sit?" **Global mode built**; league/rival modes are the remaining step.
+   One function, three reference populations (identical calc, only the
    denominator changes): Overall rank (`selected_by_percent`), Mini league (top
    50 by league rank, one `picks/` call each, cache for the GW; larger leagues
-   show a top-50 notice), Single rival (one `picks/` call). Columns: global
-   ownership %, reference ownership %, difference. Shows one line of ahead/behind
-   guidance derived from the user's rank within the population.
+   show a top-50 notice), Single rival (one `picks/` call).
+
+   Global mode shows ownership % + a band flag only — reference % and difference
+   would be a repeat of the global figure and a column of zeroes, so they land
+   with the populations that give them meaning. Bands: Template ≥40, Popular
+   15–40, Low 5–15, Differential <5.
+
+   **Never colour the bands good/bad.** Ahead of the field a differential is a
+   risk; behind, it's how you close the gap. Same player, opposite meaning — so
+   colour would be wrong for one reader and breaks §6.4's green-means-good rule.
+   Direction lives in one guidance line above the table, never per player
+   (§7.4). Denominator is `total_players`; median split; null rank → unknown.
 4. **Club Blocks** — "who should I buy?" **Built.** The deliberate exception:
    rows are the **20 clubs**, not the 15 players. Fixture Score over the §7.6
    horizon, sortable (default highest first). Owned count per club with an
    amber "3 max" badge at the three-per-club limit.
 
-Build order: (1) API routes w/ caching + headers, (2) squad loading, (3)
-Fixtures, (4) Club Blocks, (5) Form, (6) Ownership global, (7) Ownership
-league/rival. Steps 1–3 are a shippable tool on their own.
+Build order: (1) API routes ✅, (2) squad loading ✅, (3) Fixtures ✅,
+(4) Club Blocks ✅, (5) Form ✅, (6) Ownership global ✅, (7) Ownership
+league/rival — **the only step left**, and the first needing new fetching
+(one `picks/` call per manager, capped at 50).
 
 ## Fixture Score
 

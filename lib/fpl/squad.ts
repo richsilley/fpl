@@ -29,8 +29,23 @@ export type SquadPlayer = {
   clubName: string
   /** Price in tenths (constraint 4). Use `formatPrice` to display. */
   price: number
+  /** Price change this gameweek, in tenths. Signed (section 7.3). */
+  priceChangeEvent: number
+  /** Price change since the season started, in tenths. Signed (section 7.3). */
+  priceChangeStart: number
   totalPoints: number
   form: string
+  /** Points per game, as the API's string so its precision is preserved. */
+  pointsPerGame: string
+  minutes: number
+  expectedGoals: string
+  expectedAssists: string
+  expectedGoalInvolvements: string
+  /**
+   * Percentage of all FPL managers owning this player, as the API's string.
+   * The global reference population for the Ownership view (section 7.4).
+   */
+  selectedByPercent: string
   /** 1 to 15. 1 to 11 start, 12 to 15 are the bench in order. */
   squadPosition: number
   isCaptain: boolean
@@ -42,6 +57,8 @@ export type SquadPlayer = {
 }
 
 export type SquadManager = {
+  /** The manager's own FPL entry ID, for finding them in league standings. */
+  id: number
   /** The person, e.g. "Rich Silley". */
   managerName: string
   /** The team, e.g. "Troy Story". */
@@ -51,6 +68,14 @@ export type SquadManager = {
   /** Points scored in the gameweek shown. */
   gameweekPoints: number
   gameweek: number
+  /**
+   * The manager's own mini leagues, so the Ownership view can offer them
+   * directly instead of asking for a league ID. FPL enrols everyone into
+   * global leagues (Overall, their country, sponsors); those are filtered out
+   * because comparing against millions of managers is what global mode
+   * already does, and each would be capped to its top 50 anyway.
+   */
+  leagues: { id: number; name: string; size: number | null }[]
 }
 
 export type Squad = {
@@ -93,6 +118,7 @@ export async function loadSquad(managerId: number): Promise<Squad> {
 
   return {
     manager: {
+      id: entry.id,
       managerName:
         `${entry.player_first_name} ${entry.player_last_name}`.trim(),
       teamName: entry.name,
@@ -101,6 +127,14 @@ export async function loadSquad(managerId: number): Promise<Squad> {
       overallRank: picks.entry_history.overall_rank,
       gameweekPoints: picks.entry_history.points,
       gameweek,
+      leagues: (entry.leagues?.classic ?? [])
+        // `x` is a league someone created. `s` is one FPL enrolled them into.
+        .filter((league) => league.league_type === 'x')
+        .map((league) => ({
+          id: league.id,
+          name: league.name,
+          size: league.rank_count,
+        })),
     },
     startingXi: players.filter((player) => player.squadPosition <= 11),
     bench: players.filter((player) => player.squadPosition > 11),
@@ -126,8 +160,16 @@ function toSquadPlayer(
     club: club?.short_name ?? '?',
     clubName: club?.name ?? 'Unknown club',
     price: element.now_cost,
+    priceChangeEvent: element.cost_change_event,
+    priceChangeStart: element.cost_change_start,
     totalPoints: element.total_points,
     form: element.form,
+    pointsPerGame: element.points_per_game,
+    minutes: element.minutes,
+    expectedGoals: element.expected_goals,
+    expectedAssists: element.expected_assists,
+    expectedGoalInvolvements: element.expected_goal_involvements,
+    selectedByPercent: element.selected_by_percent,
     squadPosition: pick.position,
     isCaptain: pick.is_captain,
     isViceCaptain: pick.is_vice_captain,

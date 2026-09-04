@@ -21,11 +21,26 @@ export type ViewId = (typeof VIEWS)[number]
 export const DEFAULT_VIEW: ViewId = 'fixtures'
 
 /**
- * Views that exist. `form` and `ownership` are in section 8.2's table but are
- * build steps 5 to 7, so they are not offered as tabs yet. A URL naming one
- * falls back to the default rather than rendering an empty shell.
+ * Views that exist. All four are now built, though Ownership currently offers
+ * only the global reference population; its league and rival modes are the
+ * remaining build step.
+ *
+ * Ordered so the three fifteen-row views sit together and the club-row
+ * exception (section 4) sits at the end.
  */
-export const BUILT_VIEWS = ['fixtures', 'clubs'] as const satisfies readonly ViewId[]
+export const BUILT_VIEWS = [
+  'fixtures',
+  'form',
+  'ownership',
+  'clubs',
+] as const satisfies readonly ViewId[]
+
+/** Views whose columns are driven by the horizon (sections 7.2, 7.5 and 7.6). */
+export const HORIZON_VIEWS: readonly ViewId[] = ['fixtures', 'clubs']
+
+export function usesHorizon(view: ViewId): boolean {
+  return HORIZON_VIEWS.includes(view)
+}
 
 export const VIEW_LABELS: Record<ViewId, string> = {
   fixtures: 'Fixtures',
@@ -97,11 +112,41 @@ export function nextClubSort(
   return `${field}-${active.descending ? 'asc' : 'desc'}` as ClubSort
 }
 
+/**
+ * Section 8.2: `league` selects the mini-league population, and `rival` its
+ * single-manager counterpart. Neither present means global mode.
+ *
+ * A URL carrying both is ambiguous, so `league` wins and `rival` is ignored.
+ * The mode selector always sets one and clears the other, so this only ever
+ * arises from a hand-edited URL.
+ */
+export function ownershipModeOf(
+  league: string | undefined,
+  rival: string | undefined
+): 'global' | 'league' | 'rival' {
+  if (league) return 'league'
+  if (rival) return 'rival'
+  return 'global'
+}
+
+/** A manager or league ID from the URL. Returns null for anything invalid. */
+export function parseEntityId(value: string | undefined): number | null {
+  if (!value || !/^\d+$/.test(value)) {
+    return null
+  }
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+}
+
 export type AppState = {
   id: string
   view?: ViewId
   horizon?: Horizon
   sort?: ClubSort
+  /** Mini-league population for the Ownership view (section 7.4). */
+  league?: string | null
+  /** Single-rival population for the Ownership view (section 7.4). */
+  rival?: string | null
 }
 
 /**
@@ -110,7 +155,14 @@ export type AppState = {
  * Section 8.2 blesses the bare `?id=` form, so omitting defaults keeps shared
  * links short without changing what they render.
  */
-export function buildHref({ id, view, horizon, sort }: AppState): string {
+export function buildHref({
+  id,
+  view,
+  horizon,
+  sort,
+  league,
+  rival,
+}: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
   if (view && view !== DEFAULT_VIEW) {
@@ -121,6 +173,14 @@ export function buildHref({ id, view, horizon, sort }: AppState): string {
   }
   if (sort && sort !== DEFAULT_CLUB_SORT) {
     params.set('sort', sort)
+  }
+  // Explicit null clears the parameter, which is how the mode selector
+  // switches populations without leaving the previous one in the URL.
+  if (league) {
+    params.set('league', league)
+  }
+  if (rival) {
+    params.set('rival', rival)
   }
   return `/?${params.toString()}`
 }

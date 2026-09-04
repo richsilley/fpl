@@ -190,6 +190,28 @@ export type FplEntry = {
   summary_overall_rank: number | null
   summary_event_points: number
   summary_event_rank: number | null
+  /**
+   * The manager's leagues (section 5.1). Used to offer their own mini leagues
+   * in the Ownership view rather than making them find a league ID.
+   */
+  leagues: {
+    classic: FplEntryLeague[]
+  }
+}
+
+/** One of the manager's classic leagues, from `entry/{id}/`. */
+export type FplEntryLeague = {
+  id: number
+  name: string
+  /** The manager's rank in this league. */
+  entry_rank: number | null
+  /** How many managers are in it. */
+  rank_count: number | null
+  /**
+   * `s` for the global leagues FPL enrols everyone into (Overall, a country,
+   * a sponsor), `x` for ones people actually create and join.
+   */
+  league_type: string
 }
 
 /** One manager's row in a classic league table. */

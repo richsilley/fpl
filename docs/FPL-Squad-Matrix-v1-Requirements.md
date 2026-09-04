@@ -2,7 +2,7 @@
 
 **Version:** 1.8
 **Date:** 4 September 2026
-**Status:** Approved for build. Steps 1 to 4 of the build order are complete
+**Status:** Approved for build. Steps 1 to 6 of the build order are complete
 
 ---
 
@@ -238,6 +238,16 @@ Columns: price, price change this gameweek, price change since season start, for
 
 Availability should be visually obvious. Red for out, amber for doubtful with the percentage chance shown, no flag for available.
 
+**"Visually obvious" means visible without scrolling.** The availability flag sits in the frozen player column as well as in its own Status column. Twelve columns do not fit on a phone, so a flag that lives only in the Status column is off screen at exactly the width where it matters most. The Status column carries the fuller wording and the News column the reason.
+
+**The flag carries text, not only colour.** "Out" or the percentage, so the state survives greyscale and colour blindness.
+
+**Five API status codes collapse to the three states above.** `a` is available; `d` is doubtful; `i` injured, `s` suspended and `u` unavailable are all out, as is `n` and anything unrecognised. Defaulting an unknown code to out rather than available is deliberate: showing an unfit player as fit is the more costly error. Percentages come from `chance_of_playing_next_round`, which is occasionally null even for a doubt, so fall back to the word.
+
+**Price movements are signed and coloured by direction,** green for a rise and red for a fall, consistent with 6.4's rule that green means good: a rise lifts the owner's team value. No change renders as an em dash rather than a zero, so the eye goes to the movements. Both movement fields are in tenths like the price itself (constraint 4).
+
+This view has no horizon and no Fixture Score, so the horizon control (7.6) and the fixture colour legend are not shown on it. The `horizon` parameter is still carried through the view switcher, so returning to Fixtures or Club Blocks restores the horizon the user left.
+
 ### 7.4 View 3 — Ownership
 
 **Question answered:** is this player worth owning, given who else owns them and where I sit?
@@ -257,6 +267,22 @@ Columns: global ownership %, reference population ownership %, and the differenc
 **Direction flag.** The app derives whether the user is ahead of or behind the reference population, using their rank within it. Ahead means differentials are a risk and convergence protects the lead. Behind means the opposite. Display this as a single line of guidance above the table, not as advice per player.
 
 **League size cap: 50 managers.** A mini league requires one API call per manager. Fetch the top 50 by current league rank and no more. If the league is larger, show a notice stating that the comparison covers the top 50 only. Cache all fetched squads for the remainder of the gameweek.
+
+#### 7.4.1 Global mode as built
+
+Build step 6 delivered the global population only. The league and rival populations are step 7 and change the denominator, not the presentation.
+
+In global mode the reference population *is* the global one, so the three columns above collapse: reference ownership would repeat the global figure and the difference would always be zero. Rendering two dead columns would be worse than not rendering them. Global mode therefore shows ownership and the flag, and the second and third columns arrive with the populations that give them meaning.
+
+**Flags, not raw percentages alone.** The question in 7.4 is comparative, so ownership is banded: Template at 40% and above, Popular 15 to 40, Low 5 to 15, Differential below 5. The percentage is still shown, with a bar scaled to 100 rather than to the highest value in the squad, so a player looks the same in every squad.
+
+**The bands must not be coloured good or bad.** This is the direction flag's whole point: ahead of the field a differential is a risk, behind it a differential is the way to close the gap. The same 4% player means opposite things to two managers, so shading it green or red is wrong for one of them and breaks 6.4's rule that green means good everywhere. The bands are neutral; the single guidance line carries the direction.
+
+**The flag must survive a narrow screen.** As with availability in 7.3, the flag moves into the frozen player column below the `sm` breakpoint rather than scrolling out of view.
+
+**Direction flag denominator.** Global mode reads the manager's overall rank against `total_players` from `bootstrap-static`, which is why that field is retained in the projection in 5.3. The split is the median: ahead is the better half of the field. Before any rank is published the flag reads as unknown rather than guessing.
+
+This view has no horizon, so like the Form view it does not show the horizon control, but it carries the parameter through.
 
 ### 7.5 View 4 — Club Blocks
 
@@ -337,6 +363,8 @@ Parameters at their default value may be omitted from generated links, which kee
 
 Invalid parameter values fall back to the default rather than erroring. A `view` naming a stage not yet built falls back to `fixtures` rather than rendering an empty shell, and only built views are offered as tabs.
 
+**A parameter a view does not use is still carried through it.** The Form view has no horizon, so it does not show the horizon control, but switching to it and back must return the user to the horizon they left. Dropping a parameter because the current view ignores it makes the view switcher lose state, which 7.6 rules out.
+
 ### 8.3 Caching
 
 Required, both for performance and to avoid placing load on FPL's servers.
@@ -383,13 +411,17 @@ Mobile becomes the primary surface once the tool is shared beyond the author, si
 2. ~~Squad loading and row rendering~~ **Done**
 3. ~~Fixtures view (the highest-value view, build it first)~~ **Done**
 4. ~~Club Blocks view (reuses the fixture data already fetched)~~ **Done**
-5. Form view (no new data required; `bootstrap-static` is already loaded)
-6. Ownership view, global mode only
+5. ~~Form view (no new data required; `bootstrap-static` is already loaded)~~ **Done**
+6. ~~Ownership view, global mode only~~ **Done**
 7. Ownership view, league and rival modes
 
 Steps 1 to 3 constitute a genuinely useful tool on their own. Ship there if needed.
 
-Step 5 needs no new fetching, but it does need fields. Check them against the projection list in 5.3 before starting: anything missing has to be added there first or it will not reach the browser.
+Step 5 needed no new fetching and no new fields: every column in 7.3 was already in the projection list in 5.3, which was derived from that section. Check any further view against that list before starting, since a missing field will not reach the browser.
+
+Step 6 needed no new fetching either: global ownership is `selected_by_percent`, and the direction flag's denominator is `total_players`, both already in the projection.
+
+Step 7 is the first to need new fetching, and the first to need a per-manager fan-out. See the 50-manager cap in 7.4 and the caching row for picks in 8.3. It is also the first step where the reference-population columns in 7.4 become meaningful, so it adds columns to the Ownership view rather than only a mode selector. See 7.4.1.
 
 ## 10. Deferred to v2
 
@@ -413,4 +445,5 @@ All three v1 open questions are now closed.
 1. FPL's FDR is set pre-season and does not update to reflect form. A club whose fixtures look easy on paper may not be. Accepted for v1
 2. Response shapes on the undocumented API can change over the summer break, requiring a re-check each August
 3. Blank and double logic cannot be tested against live data until cup postponements are confirmed, typically from GW18. **Partly mitigated:** the logic has been verified against synthetic fixture data covering a blank, a double, an unscheduled fixture with a null `event`, and a double taking the score above 10. It remains unverified against real postponements
-4. There is no automated test suite. The verifications above were run through a temporary route and then deleted, so they do not protect against regression. Section 6 arithmetic and the blank and double handling are the parts most worth covering if one is added
+4. There is no automated test suite. The verifications above were run through a temporary route and then deleted, so they do not protect against regression. Section 6 arithmetic, the blank and double handling, and the status-code mapping in 7.3 are the parts most worth covering if one is added
+5. Most squads have no unavailable players, so the availability states in 7.3 will not appear in casual testing. The rendering was verified against a squad holding one loaned-out player and one 50% doubt, found by scanning the overall league. Re-check against a real flagged squad after any change to that column rather than assuming an all-available squad proves it works

@@ -34,6 +34,12 @@ export type MatrixData = {
   horizon: Horizon
   /** Gameweeks left to play: the largest horizon the control accepts. */
   maxHorizon: number
+  /**
+   * Total FPL entries. The denominator for the Ownership view's direction
+   * flag (section 7.4), which reads the manager's overall rank as a share of
+   * the whole field.
+   */
+  totalPlayers: number
 }
 
 export async function loadMatrixData(
@@ -61,5 +67,6 @@ export async function loadMatrixData(
     // left rather than erroring.
     horizon: clampHorizon(horizon, startGameweek),
     maxHorizon: maxHorizon(startGameweek),
+    totalPlayers: bootstrap.total_players,
   }
 }

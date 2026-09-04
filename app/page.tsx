@@ -2,20 +2,57 @@ import { ClubBlocksTable } from '@/app/components/club-blocks-table'
 import { ErrorNotice } from '@/app/components/error-notice'
 import { FixturesLegend } from '@/app/components/fixtures-legend'
 import { FixturesTable } from '@/app/components/fixtures-table'
+import { FormTable } from '@/app/components/form-table'
 import { HorizonSelector } from '@/app/components/horizon-selector'
+import { Suspense } from 'react'
+
 import { ManagerIdForm } from '@/app/components/manager-id-form'
+import { OwnershipModeSelector } from '@/app/components/ownership-mode-selector'
+import { OwnershipTable } from '@/app/components/ownership-table'
 import { SquadHeader } from '@/app/components/squad-header'
 import { ViewTabs } from '@/app/components/view-tabs'
 import { buildClubBlocks } from '@/lib/fpl/clubs'
 import { FplApiError } from '@/lib/fpl/errors'
 import { parseHorizon, type Horizon } from '@/lib/fpl/fixtures'
 import {
+  ownershipModeOf,
   parseClubSort,
+  parseEntityId,
   parseView,
+  usesHorizon,
+  VIEW_LABELS,
   type ClubSort,
   type ViewId,
 } from '@/lib/fpl/params'
+import {
+  compareOwnership,
+  globalPopulation,
+  leaguePopulation,
+  LEAGUE_MANAGER_CAP,
+  referenceContext,
+  rivalPopulation,
+  type ReferenceMode,
+  type ReferencePopulation,
+} from '@/lib/fpl/reference'
+import type { Squad } from '@/lib/fpl/squad'
 import { loadMatrixData, type MatrixData } from '@/lib/fpl/views'
+
+/**
+ * The league population makes up to fifty `picks/` calls. They are cached for
+ * the rest of the gameweek, so this ceiling is only reached the first time a
+ * league is opened in a gameweek, but the default of ten seconds is not
+ * enough for that first load.
+ */
+export const maxDuration = 60
+
+/** The question each view answers, from sections 7.2 to 7.5. */
+const VIEW_QUESTIONS: Record<ViewId, string> = {
+  fixtures: 'Where are my fixture problems?',
+  form: 'Who is playing well, and who is at risk?',
+  ownership:
+    'Is this player worth owning, given who else owns them and where I sit?',
+  clubs: 'Who should I buy?',
+}
 
 /**
  * The matrix: fifteen player rows, with the columns changing per view
@@ -48,6 +85,14 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const view = parseView(first(params.view))
   const horizon = parseHorizon(first(params.horizon))
   const sort = parseClubSort(first(params.sort))
+  const leagueId = parseEntityId(first(params.league))
+  const rivalId = parseEntityId(first(params.rival))
+  // An unparseable league or rival ID falls back to global rather than
+  // erroring, per section 8.2.
+  const ownershipMode = ownershipModeOf(
+    leagueId === null ? undefined : String(leagueId),
+    rivalId === null ? undefined : String(rivalId)
+  )
 
   return (
     <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -71,6 +116,9 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             view={view}
             horizon={horizon}
             sort={sort}
+            ownershipMode={ownershipMode}
+            leagueId={leagueId}
+            rivalId={rivalId}
           />
         ) : (
           <EmptyState />
@@ -85,11 +133,17 @@ async function MatrixSection({
   view,
   horizon,
   sort,
+  ownershipMode,
+  leagueId,
+  rivalId,
 }: {
   managerId: string
   view: ViewId
   horizon: Horizon
   sort: ClubSort
+  ownershipMode: ReferenceMode
+  leagueId: number | null
+  rivalId: number | null
 }) {
   let data: MatrixData
   try {
@@ -120,33 +174,39 @@ async function MatrixSection({
         view={view}
         horizon={data.horizon}
         sort={sort}
+        league={leagueId === null ? null : String(leagueId)}
+        rival={rivalId === null ? null : String(rivalId)}
       />
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-              {view === 'clubs' ? 'Club Blocks' : 'Fixtures'}
+              {VIEW_LABELS[view]}
             </h2>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              {view === 'clubs'
-                ? 'Who should I buy? '
-                : 'Where are my fixture problems? '}
-              Gameweek {data.startGameweek} onwards.
+              {VIEW_QUESTIONS[view]}
+              {usesHorizon(view) && ` Gameweek ${data.startGameweek} onwards.`}
             </p>
           </div>
-          {/* The applied horizon, not the requested one, so a clamped value
-              shows what is actually on screen (section 7.6). Keyed on it so a
-              navigation remounts the control and its input picks up the new
-              value, rather than holding the one it was first rendered with. */}
-          <HorizonSelector
-            key={`${view}-${data.horizon}`}
-            managerId={managerId}
-            horizon={data.horizon}
-            maxHorizon={data.maxHorizon}
-            view={view}
-            sort={sort}
-          />
+          {/* Only the two horizon-driven views get the control. Showing it on
+              the Form view would offer a setting that changes nothing there.
+              The parameter is still carried through, so switching back to
+              Fixtures returns to the horizon you left (section 7.6).
+
+              The applied horizon, not the requested one, so a clamped value
+              shows what is actually on screen. Keyed on it so a navigation
+              remounts the control and its input picks up the new value. */}
+          {usesHorizon(view) && (
+            <HorizonSelector
+              key={`${view}-${data.horizon}`}
+              managerId={managerId}
+              horizon={data.horizon}
+              maxHorizon={data.maxHorizon}
+              view={view}
+              sort={sort}
+            />
+          )}
         </div>
 
         {view === 'clubs' ? (
@@ -166,12 +226,167 @@ async function MatrixSection({
             columns={data.columns}
             sort={sort}
           />
+        ) : view === 'form' ? (
+          <FormTable squad={data.squad} />
+        ) : view === 'ownership' ? (
+          <>
+            <OwnershipModeSelector
+              managerId={managerId}
+              manager={data.squad.manager}
+              mode={ownershipMode}
+              leagueId={leagueId}
+              rivalId={rivalId}
+              horizon={data.horizon}
+              sort={sort}
+            />
+            {/* The league population is one picks call per manager, up to
+                fifty, and a single call runs over a second. Streaming means
+                the squad header, tabs and selector are on screen immediately
+                rather than the page hanging on the fan-out. Everything is
+                cached for the rest of the gameweek, so this only bites the
+                first time a league is opened. */}
+            <Suspense
+              key={`${ownershipMode}-${leagueId ?? rivalId ?? 'global'}`}
+              fallback={<OwnershipLoading mode={ownershipMode} />}
+            >
+              <OwnershipSection
+                squad={data.squad}
+                totalPlayers={data.totalPlayers}
+                mode={ownershipMode}
+                leagueId={leagueId}
+                rivalId={rivalId}
+              />
+            </Suspense>
+          </>
         ) : (
           <FixturesTable view={data} />
         )}
 
-        <FixturesLegend />
+        {/* The legend explains fixture shading and the Fixture Score, neither
+            of which the Form view shows. */}
+        {usesHorizon(view) && <FixturesLegend />}
       </section>
+    </div>
+  )
+}
+
+/**
+ * Builds the reference population and renders the Ownership table.
+ *
+ * Separated so it can sit behind its own `<Suspense>` boundary: the league
+ * population is the one slow path in the app, and the rest of the page has no
+ * reason to wait for it.
+ */
+async function OwnershipSection({
+  squad,
+  totalPlayers,
+  mode,
+  leagueId,
+  rivalId,
+}: {
+  squad: Squad
+  totalPlayers: number
+  mode: ReferenceMode
+  leagueId: number | null
+  rivalId: number | null
+}) {
+  const players = [...squad.startingXi, ...squad.bench]
+
+  let reference: ReferencePopulation
+  try {
+    reference = await buildPopulation({
+      mode,
+      players,
+      squad,
+      totalPlayers,
+      leagueId,
+      rivalId,
+    })
+  } catch (error) {
+    const fplError =
+      error instanceof FplApiError
+        ? error
+        : new FplApiError(
+            'unavailable',
+            'Could not build the comparison population.',
+            { cause: error }
+          )
+
+    if (!(error instanceof FplApiError)) {
+      console.error('[ownership] unexpected error', error)
+    }
+
+    return <ErrorNotice kind={fplError.kind} message={fplError.message} />
+  }
+
+  return (
+    <OwnershipTable
+      rows={compareOwnership(players, reference)}
+      reference={reference}
+      teamName={squad.manager.teamName}
+    />
+  )
+}
+
+async function buildPopulation({
+  mode,
+  players,
+  squad,
+  totalPlayers,
+  leagueId,
+  rivalId,
+}: {
+  mode: ReferenceMode
+  players: Squad['startingXi']
+  squad: Squad
+  totalPlayers: number
+  leagueId: number | null
+  rivalId: number | null
+}): Promise<ReferencePopulation> {
+  if (mode === 'league' && leagueId !== null) {
+    const { events } = await referenceContext()
+    return leaguePopulation(
+      leagueId,
+      squad.manager.id,
+      squad.manager.gameweek,
+      events
+    )
+  }
+
+  if (mode === 'rival' && rivalId !== null) {
+    const { events } = await referenceContext()
+    return rivalPopulation(
+      rivalId,
+      squad.manager.overallRank,
+      squad.manager.gameweek,
+      events
+    )
+  }
+
+  return globalPopulation(
+    new Map(players.map((player) => [player.id, player])),
+    squad.manager.overallRank,
+    totalPlayers
+  )
+}
+
+function OwnershipLoading({ mode }: { mode: ReferenceMode }) {
+  return (
+    <div
+      role="status"
+      className="rounded-lg border border-dashed border-neutral-300 p-6 text-center dark:border-neutral-700"
+    >
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        {mode === 'league'
+          ? `Loading up to ${LEAGUE_MANAGER_CAP} squads from the league…`
+          : 'Loading the comparison…'}
+      </p>
+      {mode === 'league' && (
+        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
+          This takes a moment the first time. Squads are then cached for the
+          rest of the gameweek.
+        </p>
+      )}
     </div>
   )
 }

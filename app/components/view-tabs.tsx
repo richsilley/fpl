@@ -26,11 +26,16 @@ export function ViewTabs({
   view,
   horizon,
   sort,
+  league,
+  rival,
 }: {
   managerId: string
   view: ViewId
   horizon: Horizon
   sort: ClubSort
+  /** Carried through so leaving Ownership and returning keeps the population. */
+  league: string | null
+  rival: string | null
 }) {
   return (
     <nav
@@ -42,7 +47,14 @@ export function ViewTabs({
         return (
           <Link
             key={id}
-            href={buildHref({ id: managerId, view: id, horizon, sort })}
+            href={buildHref({
+              id: managerId,
+              view: id,
+              horizon,
+              sort,
+              league,
+              rival,
+            })}
             aria-current={selected ? 'page' : undefined}
             scroll={false}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
