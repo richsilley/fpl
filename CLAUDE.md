@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.9; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.11; v1 feature complete).
 
 ## What this is
 
@@ -68,15 +68,21 @@ instances and deploys. Result: 1.65MB → 298KB response, 341KB cache entry, 6x
 under the limit.
 
 `events`, `teams` and `element_types` pass through whole (~35KB). `elements` is
-cut from ~100 fields to these 20 (`lib/fpl/projection.ts`):
+cut from ~100 fields to these 22 (`lib/fpl/projection.ts`):
 
 ```
 id, web_name, first_name, second_name, team, element_type,
 now_cost, cost_change_event, cost_change_start,
 form, total_points, points_per_game, minutes,
 expected_goals, expected_assists, expected_goal_involvements,
+defensive_contribution, defensive_contribution_per_90,
 selected_by_percent, status, news, chance_of_playing_next_round
 ```
+
+`defensive_contribution_per_90` arrives as a number (not a string like the xG
+fields) and equals `defensive_contribution / minutes * 90`, so nothing needs
+deriving. It is a season average against a per-match threshold — see
+`lib/fpl/defcon.ts` for why that makes it a proxy, not a prediction.
 
 **If a view needs a field that isn't listed, add it** to `FplElement` in
 `lib/fpl/types.ts`, to `projectElement`, and to this list. The projection picks
@@ -191,17 +197,28 @@ Rows are the 15 players except where noted.
    stretch cells across the page. Each cell = opponent + H/A, shaded by
    raw FDR. Frozen name column. Blanks = empty cells, doubles = split cells.
    Summary column shows Fixture Score over the §7.6 horizon.
-2. **Form** — "who is playing well / at risk?" **Built.** Columns: price, price
-   change this GW, price change since season start, form, total points, PPG,
-   minutes, xG, xA, xGI, availability status, injury news text. Availability:
-   red = out, amber + % = doubtful, no flag = available.
+2. **Form** — "who is playing well / at risk?" **Built, redesigned §7.3.1.**
+   Columns in order: price, GW change, season change, pts, PPG, form, mins,
+   xGI. (No xG/xA, no Status/News columns — those were removed.)
 
-   **The flag sits in the frozen player column, not just the Status column** —
-   12 columns don't fit a phone, and a flag that scrolls off isn't "visually
-   obvious". Status code mapping is in `lib/fpl/availability.ts`: `a` available,
-   `d` doubtful, everything else (`i`/`s`/`u`/`n`/unknown) out. **Unknown codes
-   fail to "out"** — showing an unfit player as fit is the costlier error.
-   Most squads are fully available, so test against a flagged one.
+   **Only Form/Mins/xGI get width** (w-20); everything else is sized to its
+   content. The table sizes to content, not `w-full` — otherwise the surplus
+   redistributes and quietly re-widens the slim columns.
+
+   **Data bars on exactly three columns**: Form and xGI scale to the squad max
+   (comparison); **Mins scales to gameweeks × 90** (reliability — a full bar
+   means every minute played, regardless of squad). Muted single tone, never a
+   red-green scale: 15 players in one squad is a narrow range. One hue per
+   column (sky/grey/violet) so they read as separate columns. **Anchored
+   left** — right-anchored, short bars hide behind their own number.
+
+   Availability is a dot before the name + tinted row + optional news line, not
+   columns. Mapping in `lib/fpl/availability.ts`; unknown codes fail to "out".
+   GKP xGI renders an em dash — a zero reads as bad, a dash as not applicable.
+   Zero price change renders empty, not a dash.
+
+   Sorting is per-group (XI and bench stay split), ties fall back to squad
+   order, and the Player header is the way back to squad order.
 3. **Ownership** — "is this player worth owning given who else owns them and where
    I sit?" **Built, all three modes.** `compareOwnership()` in
    `lib/fpl/reference.ts` is *the* one function — it takes a population and

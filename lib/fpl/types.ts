@@ -68,6 +68,15 @@ export type FplElement = {
   expected_assists: string
   expected_goal_involvements: string
 
+  /**
+   * Defensive contribution: the count of qualifying defensive actions, and
+   * the same figure per 90 minutes. Verified present on the live API on
+   * 4 September 2026, and the per-90 field is a number, not a string like the
+   * expected-goals fields, so it needs no derivation from minutes.
+   */
+  defensive_contribution: number
+  defensive_contribution_per_90: number
+
   /** Global ownership, for the Ownership view (section 7.4). */
   selected_by_percent: string
 

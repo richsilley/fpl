@@ -41,6 +41,10 @@ export type SquadPlayer = {
   expectedGoals: string
   expectedAssists: string
   expectedGoalInvolvements: string
+  /** Qualifying defensive actions this season. */
+  defensiveContribution: number
+  /** The same per 90 minutes, straight from the API. See DefCon in 7.3. */
+  defensiveContributionPer90: number
   /**
    * Percentage of all FPL managers owning this player, as the API's string.
    * The global reference population for the Ownership view (section 7.4).
@@ -172,6 +176,8 @@ function toSquadPlayer(
     expectedGoals: element.expected_goals,
     expectedAssists: element.expected_assists,
     expectedGoalInvolvements: element.expected_goal_involvements,
+    defensiveContribution: element.defensive_contribution,
+    defensiveContributionPer90: element.defensive_contribution_per_90,
     selectedByPercent: element.selected_by_percent,
     squadPosition: pick.position,
     isCaptain: pick.is_captain,

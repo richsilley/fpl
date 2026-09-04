@@ -1,9 +1,9 @@
 import { FixtureCell, ScoreBadge } from '@/app/components/fixture-visuals'
 import {
-  fixtureScore,
-  fixturesFor,
-  horizonGameweeks,
-} from '@/lib/fpl/fixtures'
+  MATRIX_HEADER_HEIGHT,
+  MATRIX_ROW_HEIGHT,
+} from '@/app/components/table-metrics'
+import { fixtureScore, fixturesFor, horizonGameweeks } from '@/lib/fpl/fixtures'
 import type { SquadPlayer } from '@/lib/fpl/squad'
 import type { MatrixData } from '@/lib/fpl/views'
 
@@ -60,7 +60,7 @@ export function FixturesTable({ view }: { view: MatrixData }) {
         </caption>
 
         <thead>
-          <tr>
+          <tr className={MATRIX_HEADER_HEIGHT}>
             <th
               scope="col"
               className={`sticky left-0 z-20 border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${PLAYER_COLUMN}`}
@@ -91,7 +91,10 @@ export function FixturesTable({ view }: { view: MatrixData }) {
                 stretches the real columns to fill the page, which leaves a
                 one-gameweek view with a 500px fixture cell. When the table is
                 wider than its container this collapses to nothing. */}
-            <th aria-hidden className="w-auto border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800" />
+            <th
+              aria-hidden
+              className="w-auto border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800"
+            />
           </tr>
         </thead>
 
@@ -156,7 +159,7 @@ function PlayerRow({
     : 'bg-white dark:bg-neutral-900'
 
   return (
-    <tr>
+    <tr className={MATRIX_ROW_HEIGHT}>
       <th
         scope="row"
         className={`sticky left-0 z-10 border-b border-neutral-100 px-3 py-1.5 text-left font-normal dark:border-neutral-800/70 ${rowBackground} ${PLAYER_COLUMN}`}
@@ -192,7 +195,9 @@ function PlayerRow({
           key={gameweek}
           className={`h-px border-b border-l border-neutral-100 p-0 dark:border-neutral-800/70 ${gwColumn}`}
         >
-          <FixtureCell fixtures={fixturesFor(fixtures, player.teamId, gameweek)} />
+          <FixtureCell
+            fixtures={fixturesFor(fixtures, player.teamId, gameweek)}
+          />
         </td>
       ))}
       {/* Matches the spacer in the header. */}

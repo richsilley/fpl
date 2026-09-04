@@ -6,7 +6,7 @@ import { useState } from 'react'
 // From ./horizon and ./params rather than ./fixtures: this is a Client
 // Component, and fixtures.ts is `server-only`.
 import { HORIZON_PRESETS, type Horizon } from '@/lib/fpl/horizon'
-import { buildHref, type ClubSort, type ViewId } from '@/lib/fpl/params'
+import { buildHref, type ViewId } from '@/lib/fpl/params'
 
 /**
  * The horizon control (section 7.6), shared with Club Blocks when that lands.
@@ -43,7 +43,7 @@ export function HorizonSelector({
   /** Carried through so changing the horizon stays on the current view. */
   view: ViewId
   /** Carried through so changing the horizon keeps the Club Blocks sort. */
-  sort: ClubSort
+  sort: string | null
   /** Carried through so it survives too (section 8.2). */
   league: string | null
   rival: string | null
@@ -122,7 +122,7 @@ export function HorizonSelector({
               reader back to the default view and sort. */}
           <input type="hidden" name="id" value={managerId} />
           <input type="hidden" name="view" value={view} />
-          <input type="hidden" name="sort" value={sort} />
+          {sort && <input type="hidden" name="sort" value={sort} />}
           {league && <input type="hidden" name="league" value={league} />}
           {rival && <input type="hidden" name="rival" value={rival} />}
           <label htmlFor="horizon" className="sr-only">

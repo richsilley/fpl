@@ -63,6 +63,10 @@ function projectElement(element: FplElement): FplElement {
     expected_assists: element.expected_assists,
     expected_goal_involvements: element.expected_goal_involvements,
 
+    // Defensive contribution, section 7.3
+    defensive_contribution: element.defensive_contribution,
+    defensive_contribution_per_90: element.defensive_contribution_per_90,
+
     // Ownership, section 7.4
     selected_by_percent: element.selected_by_percent,
 

@@ -49,12 +49,15 @@ export function formatPoints(points: number): string {
  * Formats a price change for the Form view (section 7.3).
  *
  * Also in tenths, so `-1` is a fall of £0.1m. Always signed, because the
- * direction is the point of the column, and an em dash for no change so a
- * column of zeroes does not drown the movements that matter.
+ * direction is the point of the column.
+ *
+ * **No change renders as nothing at all**, not a dash. Most players have not
+ * moved in a given week, and a column of placeholders is visual noise that
+ * hides the handful of rows that did move.
  */
 export function formatPriceChange(tenths: number): string {
   if (tenths === 0) {
-    return '—'
+    return ''
   }
   const sign = tenths > 0 ? '+' : '−'
   return `${sign}${Math.abs(tenths / 10).toFixed(1)}`

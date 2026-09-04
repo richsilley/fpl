@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.9
+**Version:** 1.11
 **Date:** 4 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -91,8 +91,11 @@ id, web_name, first_name, second_name, team, element_type,
 now_cost, cost_change_event, cost_change_start,
 form, total_points, points_per_game, minutes,
 expected_goals, expected_assists, expected_goal_involvements,
+defensive_contribution, defensive_contribution_per_90,
 selected_by_percent, status, news, chance_of_playing_next_round
 ```
+
+`defensive_contribution_per_90` is supplied by the API as a number and equals `defensive_contribution / minutes * 90`, so it needs no derivation. It is a season average against a per-match threshold; see 7.3 for why that makes it a proxy rather than a prediction.
 
 **Retained in full:** `teams`, `element_types`, `events`. These are small and the views depend on them.
 
@@ -255,13 +258,67 @@ All four describe the gameweek on screen rather than live values, which is why t
 
 **Question answered:** who is playing well, and who is at risk?
 
-Columns: price, price change this gameweek, price change since season start, form, total points, points per game, minutes, xG, xA, expected goal involvements, availability status, and injury news text.
+Columns, in order: price, price change this gameweek, price change since season start, total points, points per game, form, minutes, expected goal involvements, and defensive contribution per 90.
 
 Availability should be visually obvious. Red for out, amber for doubtful with the percentage chance shown, no flag for available.
 
-**"Visually obvious" means visible without scrolling.** The availability flag sits in the frozen player column as well as in its own Status column. Twelve columns do not fit on a phone, so a flag that lives only in the Status column is off screen at exactly the width where it matters most. The Status column carries the fuller wording and the News column the reason.
+#### 7.3.1 Presentation
 
-**The flag carries text, not only colour.** "Out" or the percentage, so the state survives greyscale and colour blindness.
+Every column here is a number, and presented flat they read as a wall of them. The data is unchanged; the hierarchy comes from three devices.
+
+**Price block.** Price, GW change and Season change sit together as three right-aligned columns, ruled off from the performance columns. Movement is coloured by direction, green for a rise and red for a fall, consistent with 6.4's rule that green means good: a rise lifts the owner's team value.
+
+**No change renders as an empty cell, not a dash.** Most players have not moved in a given week, and a column of placeholders hides the handful of rows that did.
+
+**Column order:** Price, GW, Season, Pts, PPG, Form, Mins, xGI, DefCon. The bar columns are grouped at the end so the only wide columns in the table sit together rather than being interleaved with tight ones.
+
+**Alignment.** Every header except Player is centred, and every data cell is centred except Player and the bar columns. The bar columns keep their numbers right-aligned: centring one would set it adrift from the end of its own bar, which is the one place in the table where a value has a length to sit against.
+
+**The table occupies the same geometry as the Fixtures view.** Same left edge, same width, same header height, same row height, so switching between the two views does not appear to move the table. The two share the row and header heights as constants rather than each setting its own, and the Form table absorbs its leftover width in a trailing spacer column exactly as Fixtures does — without it, a full-width table redistributes the spare width across the real columns and the slim numeric ones stop being slim.
+
+**Widths are deliberately uneven, and that is the compaction rule.** The plain numeric columns are sized to their contents and no wider, because padding between bare numbers is only distance for the eye to travel. The bar columns are wider, because there the space *is* the data: a bar needs room to read as a length. **Only the bar columns carry whitespace.** Season is the one exception among the tight columns: it is sized to fit its own header, because a truncated heading is not compaction.
+
+**Data bars behind four columns:** Form, Minutes, xGI and DefCon. Not the others. The number stays fully legible on top.
+
+**Bars are anchored left, not right.** Anchored right, a short bar sits entirely behind its own right-aligned number and disappears, so the smallest values — the ones most worth spotting — showed nothing at all. From the left, every value has a visible length.
+
+**One hue per bar column**, so they read as separate columns rather than one band and a row can be scanned across without losing which is which. They remain muted and are **deliberately not a red-to-green scale**: these bars compare fifteen players within one squad, a narrow range, and a strong scale would imply the lowest is bad in absolute terms when it may not be.
+
+The hues are drawn from ones this app does not already use for meaning. Green is good, red is bad and amber is a doubt elsewhere, so all three are avoided here.
+
+The scales differ, and the difference is the point:
+
+| Bar | Drawn against | Reads as |
+|---|---|---|
+| Form, xGI | The highest value in that column across the fifteen | A comparison within the squad |
+| Minutes | Minutes *available*, gameweeks played × 90 | Reliability. A player who has played every minute is always full, whoever else is in the squad |
+| DefCon | The player's own positional threshold | Progress towards the two points, not a comparison with team-mates |
+
+**xGI and DefCon are an em dash for goalkeepers,** not `0.00`. A zero reads as a bad value; a dash correctly reads as not applicable.
+
+#### 7.3.2 Defensive contribution (DefCon)
+
+FPL awards two points for clearing a threshold of qualifying defensive actions in a match: **10 for a defender, 12 for a midfielder or forward**. Goalkeepers are outside the rule entirely.
+
+The column shows `defensive_contribution_per_90` as a bar whose full width is the player's own positional threshold. A player at or above their threshold fills the bar completely; beyond it the extra earns nothing, so showing more would overstate them.
+
+**The per-90 rate is a proxy, not a prediction.** DefCon is a threshold stat capped at two points — a player either clears the line in a match or does not, and beating it by a mile scores the same as scraping it. A season average cannot distinguish a player who clears the line most weeks from one who posts extreme scores in a few, yet only the first reliably banks the points. The figure indicates whether a player is in the right territory; it does not forecast returns.
+
+The honest measure is a **hit rate**: in what share of their matches did they actually clear the threshold. That needs per-gameweek history from `element-summary/{id}/`, one call per player, which is outside the projection in 5.3 and is **deferred beyond v1**.
+
+**Availability is not a column.** A small coloured dot sits immediately before the player name, green available, amber doubtful, red for injured, suspended or unavailable. When there is news it appears as a second line beneath the name at a smaller size, with the chance of playing appended when the API gives one. The row background is tinted when the status is anything other than available.
+
+In a normal week no player has news, so that second line does not exist and the table is quieter for it. That is the intended state, not an empty one.
+
+**Sorting.** Every numeric column sorts on clicking its header, and clicking the active column reverses it. The default is squad order, starting XI then bench. Since clicking a sorted column only ever flips its direction, the Player header is the way back, and it says so explicitly whenever a sort is applied.
+
+Sorting happens **within each group**, so the starting XI and the bench stay separated whatever the order. That split is structural (7.1), not merely the default ordering. Ties fall back to squad order so equal values keep a stable, meaningful sequence.
+
+The sort lives in the `sort` URL parameter, shared with Club Blocks (8.2). The two vocabularies do not overlap and each view falls back to its own default on a value it does not recognise, so the parameter can ride through a view switch and be restored on return.
+
+**"Visually obvious" means visible without scrolling.** This is why availability lives in the frozen player column rather than in Status and News columns of its own. Those columns are off screen at exactly the width where the flag matters most, and they were removed for it: the dot, the tinted row and the news line all travel with the frozen column.
+
+**The flag carries text, not only colour.** The dot's title and its screen-reader text give the state in words, and the news line spells out the reason and the percentage whenever there is one, so nothing depends on distinguishing red from amber.
 
 **Five API status codes collapse to the three states above.** `a` is available; `d` is doubtful; `i` injured, `s` suspended and `u` unavailable are all out, as is `n` and anything unrecognised. Defaulting an unknown code to out rather than available is deliberate: showing an unfit player as fit is the more costly error. Percentages come from `chance_of_playing_next_round`, which is occasionally null even for a doubt, so fall back to the word.
 
@@ -385,7 +442,7 @@ This makes every view shareable by construction and removes the need for account
 | `id` | Manager ID | None. Show the ID entry form |
 | `view` | `fixtures`, `form`, `ownership`, `clubs` | `fixtures` |
 | `horizon` | Any integer from 1 to the gameweeks remaining in the season | `5` |
-| `sort` | Club Blocks ordering: `score`, `club` or `owned`, each `-asc` or `-desc` | `score-desc` |
+| `sort` | Club Blocks: `score`/`club`/`owned`, each `-asc` or `-desc`. Form: `squad`, or `price`/`gw`/`season`/`form`/`points`/`ppg`/`mins`/`xgi` with a direction | Club Blocks `score-desc`, Form `squad` |
 | `league` | League ID | None. Ownership falls back to global mode |
 | `rival` | Manager ID of a single rival | None. Ownership falls back to global mode |
 

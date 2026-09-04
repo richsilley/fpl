@@ -138,11 +138,96 @@ export function parseEntityId(value: string | undefined): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+/**
+ * Form view sort (section 7.3).
+ *
+ * Shares the `sort` parameter with Club Blocks. The two vocabularies do not
+ * overlap, and each view falls back to its own default when it sees a value it
+ * does not recognise, which section 8.2 already requires. The upshot is that
+ * leaving Form sorted, visiting Club Blocks and coming back restores the Form
+ * sort, because the parameter rides through untouched.
+ */
+export type FormSortField =
+  | 'squad'
+  | 'price'
+  | 'gw'
+  | 'season'
+  | 'form'
+  | 'points'
+  | 'ppg'
+  | 'mins'
+  | 'xgi'
+  | 'defcon'
+
+/** Squad order, the default: starting XI then bench, as section 7.1 loads it. */
+export const DEFAULT_FORM_SORT = 'squad' as const
+
+export type FormSort = 'squad' | `${Exclude<FormSortField, 'squad'>}-${'asc' | 'desc'}`
+
+const SORTABLE_FORM_FIELDS: Exclude<FormSortField, 'squad'>[] = [
+  'price',
+  'gw',
+  'season',
+  'form',
+  'points',
+  'ppg',
+  'mins',
+  'xgi',
+  'defcon',
+]
+
+export function parseFormSort(value: string | undefined): FormSort {
+  if (value === 'squad') {
+    return 'squad'
+  }
+  const [field, direction] = (value ?? '').split('-')
+  const known =
+    SORTABLE_FORM_FIELDS.includes(field as Exclude<FormSortField, 'squad'>) &&
+    (direction === 'asc' || direction === 'desc')
+  return known ? (value as FormSort) : DEFAULT_FORM_SORT
+}
+
+export function splitFormSort(sort: FormSort): {
+  field: FormSortField
+  descending: boolean
+} {
+  if (sort === 'squad') {
+    return { field: 'squad', descending: false }
+  }
+  const [field, direction] = sort.split('-')
+  return { field: field as FormSortField, descending: direction === 'desc' }
+}
+
+/**
+ * What clicking a header should sort by.
+ *
+ * Numeric columns open descending, because "who has the most" is the question
+ * being asked of every one of them, and clicking the active column reverses.
+ */
+export function nextFormSort(field: FormSortField, current: FormSort): FormSort {
+  if (field === 'squad') {
+    return 'squad'
+  }
+  const active = splitFormSort(current)
+  if (active.field !== field) {
+    return `${field}-desc`
+  }
+  return `${field}-${active.descending ? 'asc' : 'desc'}`
+}
+
+/** Either view's sort vocabulary. They share one parameter; see `parseFormSort`. */
+export type AnySort = ClubSort | FormSort
+
 export type AppState = {
   id: string
   view?: ViewId
   horizon?: Horizon
-  sort?: ClubSort
+  /**
+   * Carried as written. A value one view does not understand still rides
+   * through, so leaving Form sorted and returning restores it (see
+   * `parseFormSort`). Each view parses it in its own vocabulary.
+   */
+  sort?: string | null
   /** Mini-league population for the Ownership view (section 7.4). */
   league?: string | null
   /** Single-rival population for the Ownership view (section 7.4). */
@@ -171,7 +256,9 @@ export function buildHref({
   if (horizon !== undefined && horizon !== DEFAULT_HORIZON) {
     params.set('horizon', String(horizon))
   }
-  if (sort && sort !== DEFAULT_CLUB_SORT) {
+  // Either view's default is omitted, so a table at rest has a clean URL
+  // whichever view produced it.
+  if (sort && sort !== DEFAULT_CLUB_SORT && sort !== DEFAULT_FORM_SORT) {
     params.set('sort', sort)
   }
   // Explicit null clears the parameter, which is how the mode selector

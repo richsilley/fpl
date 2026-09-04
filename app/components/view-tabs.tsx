@@ -4,7 +4,6 @@ import {
   BUILT_VIEWS,
   buildHref,
   VIEW_LABELS,
-  type ClubSort,
   type ViewId,
 } from '@/lib/fpl/params'
 import type { Horizon } from '@/lib/fpl/horizon'
@@ -32,7 +31,7 @@ export function ViewTabs({
   managerId: string
   view: ViewId
   horizon: Horizon
-  sort: ClubSort
+  sort: string | null
   /** Carried through so leaving Ownership and returning keeps the population. */
   league: string | null
   rival: string | null

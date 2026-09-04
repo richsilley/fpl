@@ -18,6 +18,7 @@ import {
   ownershipModeOf,
   parseClubSort,
   parseEntityId,
+  parseFormSort,
   parseView,
   usesHorizon,
   VIEW_LABELS,
@@ -84,7 +85,8 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const managerId = first(params.id)?.trim()
   const view = parseView(first(params.view))
   const horizon = parseHorizon(first(params.horizon))
-  const sort = parseClubSort(first(params.sort))
+  const rawSort = first(params.sort)
+  const sort = parseClubSort(rawSort)
   const leagueId = parseEntityId(first(params.league))
   const rivalId = parseEntityId(first(params.rival))
   // An unparseable league or rival ID falls back to global rather than
@@ -116,6 +118,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             view={view}
             horizon={horizon}
             sort={sort}
+            rawSort={rawSort ?? null}
             ownershipMode={ownershipMode}
             leagueId={leagueId}
             rivalId={rivalId}
@@ -133,6 +136,7 @@ async function MatrixSection({
   view,
   horizon,
   sort,
+  rawSort,
   ownershipMode,
   leagueId,
   rivalId,
@@ -141,6 +145,8 @@ async function MatrixSection({
   view: ViewId
   horizon: Horizon
   sort: ClubSort
+  /** The sort exactly as the URL had it, so carriers do not lose the other view's value. */
+  rawSort: string | null
   ownershipMode: ReferenceMode
   leagueId: number | null
   rivalId: number | null
@@ -176,7 +182,7 @@ async function MatrixSection({
         managerId={managerId}
         view={view}
         horizon={data.horizon}
-        sort={sort}
+        sort={rawSort}
         league={leagueId === null ? null : String(leagueId)}
         rival={rivalId === null ? null : String(rivalId)}
       />
@@ -207,7 +213,7 @@ async function MatrixSection({
               horizon={data.horizon}
               maxHorizon={data.maxHorizon}
               view={view}
-              sort={sort}
+              sort={rawSort}
               league={leagueId === null ? null : String(leagueId)}
               rival={rivalId === null ? null : String(rivalId)}
             />
@@ -230,7 +236,14 @@ async function MatrixSection({
             sort={sort}
           />
         ) : view === 'form' ? (
-          <FormTable squad={data.squad} />
+          <FormTable
+            squad={data.squad}
+            managerId={managerId}
+            sort={parseFormSort(rawSort ?? undefined)}
+            horizon={data.horizon}
+            league={leagueId === null ? null : String(leagueId)}
+            rival={rivalId === null ? null : String(rivalId)}
+          />
         ) : view === 'ownership' ? (
           <>
             <OwnershipModeSelector
