@@ -99,6 +99,30 @@ it rather than re-deriving picks.
 - Table wrapper is `overflow-x-auto` + `sticky left-0` first column — §8.5's
   pattern, verified at 320px: page doesn't scroll, table does, column holds.
 
+## URL state (§8.2) — read this before adding a control
+
+All params in `lib/fpl/params.ts`. **Every control is a link or a GET form, and
+every one must carry the whole state through** — otherwise changing the horizon
+silently resets the sort, or sorting bounces you to another view. Use
+`buildHref({id, view, horizon, sort})`; it omits values at their default, so
+`?id=X` alone is the canonical fixtures/horizon-5 URL §8.2 requires. The
+horizon control's GET form needs hidden `view`/`sort` inputs for the same
+reason. Invalid values fall back to defaults, never error.
+
+`view` is `fixtures` | `form` | `ownership` | `clubs`, default `fixtures`.
+`BUILT_VIEWS` gates the tabs — add to it when Form/Ownership land.
+
+## One loader for all views
+
+`loadMatrixData()` in `lib/fpl/views.ts` returns squad + fixture index + teams
++ columns. **Both views share one fixture index**, so they can't disagree about
+a score — a club reading 6.4 in Fixtures and 6.0 in Club Blocks would be a
+visible bug. Add view-specific shaping in its own module (`lib/fpl/clubs.ts`),
+not in the loader.
+
+Shared cell/badge rendering and both colour scales live in
+`app/components/fixture-visuals.tsx`. Don't re-implement per view.
+
 ## Horizon control (§7.6) — shared with Club Blocks
 
 `app/components/horizon-selector.tsx`. Presets **1/3/5/8/10** plus a numeric
@@ -137,10 +161,10 @@ Rows are the 15 players except where noted.
    show a top-50 notice), Single rival (one `picks/` call). Columns: global
    ownership %, reference ownership %, difference. Shows one line of ahead/behind
    guidance derived from the user's rank within the population.
-4. **Club Blocks** — "who should I buy?" The deliberate exception: rows are the
-   **20 clubs**, not the 15 players. Sole metric is Fixture Score over a
-   selectable horizon, sortable highest first. Flags which clubs the user already
-   holds players from and how many (three-per-club limit).
+4. **Club Blocks** — "who should I buy?" **Built.** The deliberate exception:
+   rows are the **20 clubs**, not the 15 players. Fixture Score over the §7.6
+   horizon, sortable (default highest first). Owned count per club with an
+   amber "3 max" badge at the three-per-club limit.
 
 Build order: (1) API routes w/ caching + headers, (2) squad loading, (3)
 Fixtures, (4) Club Blocks, (5) Form, (6) Ownership global, (7) Ownership

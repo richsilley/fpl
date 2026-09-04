@@ -11,14 +11,21 @@ import {
   type Horizon,
 } from './fixtures'
 import { loadSquad, type Squad } from './squad'
+import type { FplTeam } from './types'
 
 /**
- * Assembles what a view renders from the fifteen rows plus its own columns.
+ * The data every view is built from: the fifteen rows (section 4) plus the
+ * reference data the columns are drawn from.
+ *
+ * One loader for all views rather than one each. The Fixtures view and Club
+ * Blocks read the same fixture index over the same horizon, so sharing it
+ * means one fetch, and means the two can never disagree about a score.
  */
-
-export type FixturesView = {
+export type MatrixData = {
   squad: Squad
   fixtures: FixtureIndex
+  /** All twenty clubs: the row set for Club Blocks (sections 4 and 7.5). */
+  teams: FplTeam[]
   /** Leftmost gameweek column, and where the Fixture Score horizon starts. */
   startGameweek: number
   /** Every gameweek column: `startGameweek` through GW38 (section 7.2). */
@@ -29,10 +36,10 @@ export type FixturesView = {
   maxHorizon: number
 }
 
-export async function loadFixturesView(
+export async function loadMatrixData(
   managerId: number,
   horizon: Horizon
-): Promise<FixturesView> {
+): Promise<MatrixData> {
   // `getBootstrap` is cached, so asking for it alongside `loadSquad` costs a
   // cache read rather than a second trip to the FPL API, and the fixtures
   // fetch overlaps both.
@@ -47,6 +54,7 @@ export async function loadFixturesView(
   return {
     squad,
     fixtures: buildFixtureIndex(fixtures, bootstrap.teams),
+    teams: bootstrap.teams,
     startGameweek,
     columns: gameweekColumns(startGameweek),
     // Section 7.6: a horizon past the end of the season clamps to what is

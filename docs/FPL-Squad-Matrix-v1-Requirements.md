@@ -1,8 +1,8 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.7
-**Date:** 3 September 2026
-**Status:** Approved for build
+**Version:** 1.8
+**Date:** 4 September 2026
+**Status:** Approved for build. Steps 1 to 4 of the build order are complete
 
 ---
 
@@ -174,6 +174,22 @@ Render as the score to one decimal place, followed by the fixture count in brack
 
 Colour logic must stay consistent across the app: green means good everywhere. Individual fixture cells show raw FDR, where green is a low number. Summary and Club Block cells show Fixture Score, where green is a high number. The colour is the constant; the number is not.
 
+**Bands.** Fixture cells map one band per FDR value, 1 to 5. Fixture Score bands sit symmetrically around **6.0**, the score of an all-average run:
+
+| Score | Band |
+|---|---|
+| 7.5 and above | Strong green |
+| 6.5 to 7.5 | Green |
+| 5.5 to 6.5 | Neutral |
+| 4.5 to 5.5 | Red |
+| Below 4.5 | Strong red |
+
+Normalisation is what makes fixed thresholds possible: the score no longer scales with the horizon, so a band means the same thing at a horizon of 1 as at 10. The anchors are deliberate — a whole horizon of FDR 2 scores 8.0 and lands in the top band, a whole horizon of FDR 4 scores 4.0 and lands in the bottom one. Scores above 10 from a double gameweek fall in the top band and are not capped.
+
+Both views must use one implementation of these scales. A club reading green in the Fixtures view and neutral in Club Blocks is a bug the user can see.
+
+Expect the summary column to look mostly neutral at long horizons. Averaging over ten gameweeks genuinely compresses the spread, and most squads do have average fixture runs. This is honest rather than a fault to tune away.
+
 ### 6.5 Detecting blanks and doubles
 
 Neither is flagged in the API.
@@ -207,6 +223,12 @@ Distance decay, weighting nearer gameweeks more heavily than distant ones, is de
 - Blanks shown as empty cells, doubles as split cells
 - A summary column shows the **Fixture Score** (section 6) over a user-selected horizon, displayed as score with fixture count in brackets
 - Horizon control per section 7.6
+
+**"The current one" means the first gameweek not yet finished, not the API's `is_current`.** The two differ for most of the week. `is_current` advances at each deadline and stays on a gameweek after it finishes, so taking it literally would lead with a column of results nobody can act on, and would fold a played gameweek into the Fixture Score, which is meant to describe the run ahead. Mid-gameweek the first unfinished gameweek is the one being played; once it finishes it becomes the next one. The same start gameweek drives both views.
+
+**The horizon is banded in the column headers** so the reader can see which gameweeks the summary score covers.
+
+**Below the `sm` breakpoint the summary column is hidden** and the score moves under the player name instead. Kept as a column it consumes most of a phone's width and no fixtures are visible at all, which defeats the view. See 8.5.
 
 ### 7.3 View 2 — Form
 
@@ -246,6 +268,16 @@ Columns: global ownership %, reference population ownership %, and the differenc
 - Sortable, highest score first
 - Indicate which clubs the user already holds players from, and how many, to surface the three-per-club limit
 
+**Gameweek columns.** The view shows the same gameweek columns as the Fixtures view, from the start gameweek through GW38, with the horizon banded in the headers. The score still covers the horizon alone.
+
+Two reasons. "Who should I buy" is partly a question about what comes *after* the run being scored, so the columns beyond the horizon are useful rather than noise. And a table showing only the horizon leaves most of the width empty at short horizons, which section 8.5 rules out.
+
+**Sorting** is by club, Fixture Score or owned count, either direction, and lives in the `sort` URL parameter rather than component state so a sorted table is a link someone can send (see 8.2). Ties break on club name so the order is stable. Note that clubs sort on the name FPL supplies, which is `Spurs`, not `Tottenham`.
+
+**Owned indicator.** A count per club, with the player names alongside where width allows. A club at the three-player limit is called out explicitly rather than leaving the reader to notice the number, because at three the Fixture Score means something different: buying another player from that club requires selling one first.
+
+**Shares the fixture data with the Fixtures view.** Both read one index built from a single `fixtures/` fetch, over the same horizon. This is a correctness requirement, not only an efficiency one: the two views must never disagree about a club's score.
+
 ### 7.6 Horizon control
 
 Shared by the Fixtures and Club Blocks views. Both must read from the same `horizon` URL parameter, so switching between the views preserves it.
@@ -268,6 +300,12 @@ A horizon of 1 is valid and useful. The normalised Fixture Score (6.1.1) makes a
 - The `/api` routes exist as the surface for client-side callers, and are where caching, headers and error translation live
 - No database in v1
 
+**The app is server-rendered throughout, with one exception.** The horizon control is a Client Component because 7.6 asks for the preset highlight to follow what is being typed, before submission, and that state exists only in the browser. It degrades: the presets are real links and the input sits in a real GET form, so the control still works with JavaScript disabled. Everything else, including sorting and view switching, is plain navigation.
+
+Keep it that way. A control that could be a link should be a link, because 8.2 requires the state to be in the URL regardless, and a link gets that for free.
+
+Shared code imported by a Client Component must not be marked `server-only`, which is a build error. Pure helpers such as the horizon arithmetic and URL building therefore live apart from the modules that touch the FPL API.
+
 ### 8.2 State
 
 Application state lives entirely in the URL:
@@ -286,13 +324,18 @@ This makes every view shareable by construction and removes the need for account
 | `id` | Manager ID | None. Show the ID entry form |
 | `view` | `fixtures`, `form`, `ownership`, `clubs` | `fixtures` |
 | `horizon` | Any integer from 1 to the gameweeks remaining in the season | `5` |
+| `sort` | Club Blocks ordering: `score`, `club` or `owned`, each `-asc` or `-desc` | `score-desc` |
 | `league` | League ID | None. Ownership falls back to global mode |
 
 `?id=1234567` alone must land on the fixtures view at a 5-gameweek horizon. Nobody should need to type a `view` parameter to reach the main function of the app.
 
 **Changing any control updates the URL.** This is what makes state shareable and makes the browser back button work. A link sent to someone else must reproduce exactly what the sender was looking at.
 
-Invalid parameter values fall back to the default rather than erroring.
+**Every control must carry the whole state, not just its own parameter.** Changing the horizon must preserve the view and the sort; sorting must preserve the view and the horizon; switching view must preserve the horizon (7.6 requires this) and the sort. A control that emits only its own parameter silently resets the others, which reads as a bug and breaks the shareable-link guarantee. This applies equally to any GET form, which submits only its own fields and therefore needs the rest carried as hidden inputs.
+
+Parameters at their default value may be omitted from generated links, which keeps shared URLs short. `?id=X` is the canonical form of the default view.
+
+Invalid parameter values fall back to the default rather than erroring. A `view` naming a stage not yet built falls back to `fixtures` rather than rendering an empty shell, and only built views are offered as tabs.
 
 ### 8.3 Caching
 
@@ -319,23 +362,34 @@ These are two separate things and the distinction matters.
 
 **Desktop is where this will actually be used at present**, so it must look properly considered at 1440px rather than merely unbroken. Use the available width: show more gameweek columns before horizontal scrolling begins, rather than rendering a narrow table floating in a wide empty page.
 
-**Verify every view at both 380px and 1440px** before considering it complete.
+**Verify every view at both 380px and 1440px** before considering it complete. Measure rather than eyeball: a headless screenshot taken by setting a window size can clip the page and look like an overflow that is not there. Check `document.documentElement.scrollWidth` against the viewport width.
 
 The frozen first column with horizontal scroll is the core pattern at all widths.
+
+**Only the table may scroll sideways. The page must not.** Two traps make it do so anyway, both found the hard way:
+
+1. **Absolutely positioned descendants escape the scroll container.** Screen-reader-only labels inside cells are `position: absolute`. Without a positioned ancestor their containing block is the viewport, so `overflow-x: auto` does not clip them, and the ones in far-right columns stretch the document to the full width of the table. Give the scroll container `position: relative`. Setting `overflow-x: hidden` does *not* fix this; only a containing block does.
+2. **A cell's shading will not fill a taller row.** A block inside a table cell cannot resolve a percentage height unless the cell declares a definite height. Where the first column is two lines tall and the fixture cell is one, the shading falls short of the row. Declaring any definite height on the cell resolves it; the cell still stretches to the row.
+
+**Narrow layouts must keep the fixture columns visible.** Summary columns that sit between the frozen name column and the fixtures will consume the whole width of a phone. Hide them below `sm` and fold their content under the name instead. A view where no fixtures are visible until the user scrolls has failed at that width, even though nothing is broken.
+
+**Do not leave dead width inside a full-width table.** A table that stretches to fill the page distributes surplus into whichever column has no fixed width, which produces a large empty gutter mid-table. Either give the columns something useful to hold or reduce the table's width.
 
 Mobile becomes the primary surface once the tool is shared beyond the author, since most people check FPL on a phone. The layout should not need rebuilding when that happens.
 
 ## 9. Build order
 
-1. Server-side API routes with caching and correct headers
-2. Squad loading and row rendering
-3. Fixtures view (the highest-value view, build it first)
-4. Club Blocks view (reuses the fixture data already fetched)
+1. ~~Server-side API routes with caching and correct headers~~ **Done**
+2. ~~Squad loading and row rendering~~ **Done**
+3. ~~Fixtures view (the highest-value view, build it first)~~ **Done**
+4. ~~Club Blocks view (reuses the fixture data already fetched)~~ **Done**
 5. Form view (no new data required; `bootstrap-static` is already loaded)
 6. Ownership view, global mode only
 7. Ownership view, league and rival modes
 
 Steps 1 to 3 constitute a genuinely useful tool on their own. Ship there if needed.
+
+Step 5 needs no new fetching, but it does need fields. Check them against the projection list in 5.3 before starting: anything missing has to be added there first or it will not reach the browser.
 
 ## 10. Deferred to v2
 
@@ -358,4 +412,5 @@ All three v1 open questions are now closed.
 
 1. FPL's FDR is set pre-season and does not update to reflect form. A club whose fixtures look easy on paper may not be. Accepted for v1
 2. Response shapes on the undocumented API can change over the summer break, requiring a re-check each August
-3. Blank and double logic cannot be tested against live data until cup postponements are confirmed, typically from GW18
+3. Blank and double logic cannot be tested against live data until cup postponements are confirmed, typically from GW18. **Partly mitigated:** the logic has been verified against synthetic fixture data covering a blank, a double, an unscheduled fixture with a null `event`, and a double taking the score above 10. It remains unverified against real postponements
+4. There is no automated test suite. The verifications above were run through a temporary route and then deleted, so they do not protect against regression. Section 6 arithmetic and the blank and double handling are the parts most worth covering if one is added

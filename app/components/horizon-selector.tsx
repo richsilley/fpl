@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import { useState } from 'react'
 
-// From ./horizon rather than ./fixtures: this is a Client Component, and
-// fixtures.ts is `server-only`.
+// From ./horizon and ./params rather than ./fixtures: this is a Client
+// Component, and fixtures.ts is `server-only`.
 import { HORIZON_PRESETS, type Horizon } from '@/lib/fpl/horizon'
+import { buildHref, type ClubSort, type ViewId } from '@/lib/fpl/params'
 
 /**
  * The horizon control (section 7.6), shared with Club Blocks when that lands.
@@ -30,11 +31,17 @@ export function HorizonSelector({
   managerId,
   horizon,
   maxHorizon,
+  view,
+  sort,
 }: {
   managerId: string
   horizon: Horizon
   /** Gameweeks left in the season: the largest value the input accepts. */
   maxHorizon: number
+  /** Carried through so changing the horizon stays on the current view. */
+  view: ViewId
+  /** Carried through so changing the horizon keeps the Club Blocks sort. */
+  sort: ClubSort
 }) {
   // Mirrors the input so the highlight can follow what is typed, rather than
   // only what has been applied. Seeded from the applied horizon; the caller
@@ -43,7 +50,7 @@ export function HorizonSelector({
   const [draft, setDraft] = useState(String(horizon))
 
   const href = (value: number) =>
-    `/?id=${encodeURIComponent(managerId)}&horizon=${value}`
+    buildHref({ id: managerId, view, horizon: value, sort })
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -95,7 +102,12 @@ export function HorizonSelector({
         </span>
 
         <form action="/" method="get" className="flex items-center gap-2">
+          {/* A GET form submits only its own fields, so the rest of the URL
+              state has to ride along or applying a horizon would bounce the
+              reader back to the default view and sort. */}
           <input type="hidden" name="id" value={managerId} />
+          <input type="hidden" name="view" value={view} />
+          <input type="hidden" name="sort" value={sort} />
           <label htmlFor="horizon" className="sr-only">
             Custom horizon, 1 to {maxHorizon} gameweeks
           </label>

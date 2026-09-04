@@ -1,25 +1,35 @@
+import { ClubBlocksTable } from '@/app/components/club-blocks-table'
 import { ErrorNotice } from '@/app/components/error-notice'
 import { FixturesLegend } from '@/app/components/fixtures-legend'
 import { FixturesTable } from '@/app/components/fixtures-table'
 import { HorizonSelector } from '@/app/components/horizon-selector'
 import { ManagerIdForm } from '@/app/components/manager-id-form'
 import { SquadHeader } from '@/app/components/squad-header'
+import { ViewTabs } from '@/app/components/view-tabs'
+import { buildClubBlocks } from '@/lib/fpl/clubs'
 import { FplApiError } from '@/lib/fpl/errors'
 import { parseHorizon, type Horizon } from '@/lib/fpl/fixtures'
-import { loadFixturesView, type FixturesView } from '@/lib/fpl/views'
+import {
+  parseClubSort,
+  parseView,
+  type ClubSort,
+  type ViewId,
+} from '@/lib/fpl/params'
+import { loadMatrixData, type MatrixData } from '@/lib/fpl/views'
 
 /**
- * Squad loading (section 7.1) and View 1, Fixtures (section 7.2).
+ * The matrix: fifteen player rows, with the columns changing per view
+ * (section 4).
  *
- * A Server Component reading `?id=` and `?horizon=`. Section 8.2 puts state in
- * the URL, so both controls are plain navigations and a shared link reproduces
- * the exact view. Everything here renders on the server; the only client
- * JavaScript on the page is the horizon control, which needs it for the live
- * preset highlight section 7.6 asks for, and which still works without it.
+ * A Server Component reading `?id=`, `?view=`, `?horizon=` and `?sort=`.
+ * Section 8.2 puts state in the URL, so every control is a plain navigation
+ * and a shared link reproduces the exact view. Invalid values fall back to
+ * their defaults rather than erroring, so `?id=X` alone lands on the fixtures
+ * view at a 5-gameweek horizon.
  *
- * There is no `?view=` yet. Section 8.2's example includes one, but with a
- * single view built it would only ever hold one value. It arrives with View 2,
- * along with something to switch between.
+ * Almost everything renders on the server. The only client JavaScript is the
+ * horizon control, which needs it for the live preset highlight section 7.6
+ * asks for, and which still works without it.
  *
  * On section 8.1, "all FPL API calls made in server-side route handlers, never
  * from the browser": this calls lib/fpl directly rather than fetching its own
@@ -30,14 +40,14 @@ import { loadFixturesView, type FixturesView } from '@/lib/fpl/views'
  */
 export default async function Page({ searchParams }: PageProps<'/'>) {
   const params = await searchParams
-  // `?id=1&id=2` parses as an array. Take the first rather than failing.
-  const rawId = Array.isArray(params.id) ? params.id[0] : params.id
-  const managerId = rawId?.trim()
+  const first = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value
 
-  const rawHorizon = Array.isArray(params.horizon)
-    ? params.horizon[0]
-    : params.horizon
-  const horizon = parseHorizon(rawHorizon)
+  // `?id=1&id=2` parses as an array. Take the first rather than failing.
+  const managerId = first(params.id)?.trim()
+  const view = parseView(first(params.view))
+  const horizon = parseHorizon(first(params.horizon))
+  const sort = parseClubSort(first(params.sort))
 
   return (
     <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -56,7 +66,12 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
 
       <div className="mt-8">
         {managerId ? (
-          <FixturesSection managerId={managerId} horizon={horizon} />
+          <MatrixSection
+            managerId={managerId}
+            view={view}
+            horizon={horizon}
+            sort={sort}
+          />
         ) : (
           <EmptyState />
         )}
@@ -65,16 +80,20 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   )
 }
 
-async function FixturesSection({
+async function MatrixSection({
   managerId,
+  view,
   horizon,
+  sort,
 }: {
   managerId: string
+  view: ViewId
   horizon: Horizon
+  sort: ClubSort
 }) {
-  let view: FixturesView
+  let data: MatrixData
   try {
-    view = await loadFixturesView(parseManagerId(managerId), horizon)
+    data = await loadMatrixData(parseManagerId(managerId), horizon)
   } catch (error) {
     const fplError =
       error instanceof FplApiError
@@ -86,7 +105,7 @@ async function FixturesSection({
           )
 
     if (!(error instanceof FplApiError)) {
-      console.error('[fixtures] unexpected error', error)
+      console.error('[matrix] unexpected error', error)
     }
 
     return <ErrorNotice kind={fplError.kind} message={fplError.message} />
@@ -94,17 +113,26 @@ async function FixturesSection({
 
   return (
     <div className="space-y-6">
-      <SquadHeader manager={view.squad.manager} />
+      <SquadHeader manager={data.squad.manager} />
+
+      <ViewTabs
+        managerId={managerId}
+        view={view}
+        horizon={data.horizon}
+        sort={sort}
+      />
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-              Fixtures
+              {view === 'clubs' ? 'Club Blocks' : 'Fixtures'}
             </h2>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              Where are my fixture problems? Gameweek {view.startGameweek}{' '}
-              onwards.
+              {view === 'clubs'
+                ? 'Who should I buy? '
+                : 'Where are my fixture problems? '}
+              Gameweek {data.startGameweek} onwards.
             </p>
           </div>
           {/* The applied horizon, not the requested one, so a clamped value
@@ -112,14 +140,36 @@ async function FixturesSection({
               navigation remounts the control and its input picks up the new
               value, rather than holding the one it was first rendered with. */}
           <HorizonSelector
-            key={view.horizon}
+            key={`${view}-${data.horizon}`}
             managerId={managerId}
-            horizon={view.horizon}
-            maxHorizon={view.maxHorizon}
+            horizon={data.horizon}
+            maxHorizon={data.maxHorizon}
+            view={view}
+            sort={sort}
           />
         </div>
 
-        <FixturesTable view={view} />
+        {view === 'clubs' ? (
+          <ClubBlocksTable
+            blocks={buildClubBlocks({
+              teams: data.teams,
+              fixtures: data.fixtures,
+              squad: data.squad,
+              startGameweek: data.startGameweek,
+              horizon: data.horizon,
+              columns: data.columns,
+              sort,
+            })}
+            managerId={managerId}
+            horizon={data.horizon}
+            startGameweek={data.startGameweek}
+            columns={data.columns}
+            sort={sort}
+          />
+        ) : (
+          <FixturesTable view={data} />
+        )}
+
         <FixturesLegend />
       </section>
     </div>
