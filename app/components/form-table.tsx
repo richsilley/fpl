@@ -5,6 +5,7 @@ import {
   MATRIX_PLAYER_COLUMN,
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
+import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
 import { availabilityOf, type Availability } from '@/lib/fpl/availability'
 import { defconRatio, defconThreshold, formatDefcon } from '@/lib/fpl/defcon'
 import type { Horizon } from '@/lib/fpl/horizon'
@@ -50,6 +51,8 @@ const PRICE_COLUMN = 'w-16 min-w-16'
 const TIGHT_COLUMN = 'w-12 min-w-12'
 const SEASON_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
 const BAR_COLUMN = 'w-20 min-w-20'
+/** Sized to its own header, which is wider than the number under it. */
+const XP_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
 
 export function FormTable({
   squad,
@@ -57,6 +60,8 @@ export function FormTable({
   sort,
   horizon,
   carry,
+  swapHref,
+  overLimitTeamIds,
 }: {
   squad: Squad
   managerId: string
@@ -64,6 +69,10 @@ export function FormTable({
   horizon: Horizon
   /** Ownership population and view-as target, carried untouched (section 8.2). */
   carry: CarriedState
+  /** Opens the replacement panel for a player (section 7.7). Null disables it. */
+  swapHref: ((playerId: number) => string) | null
+  /** Clubs over the three-per-club limit, for the row accent (section 7.7). */
+  overLimitTeamIds: Set<number>
 }) {
   const all = [...squad.startingXi, ...squad.bench]
   const scales = barScales(all, squad.manager.gameweek)
@@ -204,6 +213,18 @@ export function FormTable({
               DefCon
             </SortableHeader>
 
+            {/* Ruled off from the bar columns: everything to its left is an
+                input, and this is somebody else's conclusion drawn from them. */}
+            <SortableHeader
+              href={sortHref('xp')}
+              active={active.field === 'xp'}
+              descending={active.descending}
+              className={`border-l border-l-neutral-200 dark:border-l-neutral-700 ${XP_COLUMN}`}
+              title="FPL's own expected points for the next gameweek. Their model, not this app's"
+            >
+              xP (FPL)
+            </SortableHeader>
+
             {/* Absorbs the leftover width, exactly as the Fixtures table does.
                 The table is `w-full` so that it starts and ends where Fixtures
                 does and switching views does not shift it, but without this the
@@ -218,13 +239,19 @@ export function FormTable({
 
         <tbody>
           {startingXi.map((player) => (
-            <PlayerRow key={player.id} player={player} scales={scales} />
+            <PlayerRow
+              key={player.id}
+              player={player}
+              scales={scales}
+              swapHref={swapHref}
+              overLimitTeamIds={overLimitTeamIds}
+            />
           ))}
 
           <tr>
             <th
               scope="colgroup"
-              colSpan={11}
+              colSpan={12}
               className="sticky left-0 border-y border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/70 dark:text-neutral-400"
             >
               Bench
@@ -236,6 +263,8 @@ export function FormTable({
               key={player.id}
               player={player}
               scales={scales}
+              swapHref={swapHref}
+              overLimitTeamIds={overLimitTeamIds}
               isBench
             />
           ))}
@@ -287,6 +316,8 @@ function sortValue(player: SquadPlayer, field: FormSortField): number {
       return Number(player.expectedGoalInvolvements) || 0
     case 'defcon':
       return player.defensiveContributionPer90
+    case 'xp':
+      return player.expectedPointsNext
     default:
       return player.squadPosition
   }
@@ -311,10 +342,14 @@ function sortPlayers(players: SquadPlayer[], sort: FormSort): SquadPlayer[] {
 function PlayerRow({
   player,
   scales,
+  swapHref,
+  overLimitTeamIds,
   isBench = false,
 }: {
   player: SquadPlayer
   scales: BarScales
+  swapHref: ((playerId: number) => string) | null
+  overLimitTeamIds: Set<number>
   isBench?: boolean
 }) {
   const availability = availabilityOf(player)
@@ -340,13 +375,14 @@ function PlayerRow({
     <tr className={MATRIX_ROW_HEIGHT}>
       <th
         scope="row"
-        className={`sticky left-0 z-10 border-b border-r border-neutral-200 px-2 py-1 text-left font-normal dark:border-neutral-800 ${rowBackground} ${PLAYER_COLUMN}`}
+        className={`sticky left-0 z-10 border-b border-r border-neutral-200 px-2 py-1 text-left font-normal dark:border-neutral-800 ${rowBackground} ${PLAYER_COLUMN} ${overLimitAccent(player.teamId, overLimitTeamIds)}`}
       >
         <span className="flex items-baseline gap-1.5">
           <StatusDot availability={availability} />
-          <span className="truncate font-medium text-neutral-900 dark:text-neutral-100">
-            {player.name}
-          </span>
+          <PlayerName
+            name={player.name}
+            href={swapHref === null ? null : swapHref(player.id)}
+          />
           <span className="shrink-0 text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
             {player.club}
           </span>
@@ -433,6 +469,14 @@ function PlayerRow({
         )}
       </NumericCell>
 
+      {/* No data bar, deliberately. Every bar to the left is an input the
+          reader weighs; this is FPL's own summary of those inputs, and giving
+          it a bar would set it competing with the columns it is derived from
+          rather than reading as a conclusion drawn after them. */}
+      <NumericCell background={rowBackground} width={XP_COLUMN} edgeLeft>
+        {player.expectedPointsNext.toFixed(1)}
+      </NumericCell>
+
       {/* Matches the spacer in the header. */}
       <td
         aria-hidden
@@ -479,6 +523,7 @@ function NumericCell({
   barTone,
   align = 'center',
   edge = false,
+  edgeLeft = false,
 }: {
   children: React.ReactNode
   background: string
@@ -487,11 +532,15 @@ function NumericCell({
   barTone?: string
   align?: 'center' | 'right'
   edge?: boolean
+  /** A heavier rule on the left, separating a column from the group before it. */
+  edgeLeft?: boolean
 }) {
   return (
     <td
       className={`border-b border-l border-neutral-100 px-1.5 py-1 dark:border-neutral-800/70 ${
         edge ? 'border-r border-r-neutral-200 dark:border-r-neutral-800' : ''
+      } ${
+        edgeLeft ? 'border-l-neutral-200 dark:border-l-neutral-700' : ''
       } ${background} ${width}`}
     >
       <span

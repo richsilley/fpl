@@ -179,6 +179,7 @@ export type FormSortField =
   | 'mins'
   | 'xgi'
   | 'defcon'
+  | 'xp'
 
 /** Squad order, the default: starting XI then bench, as section 7.1 loads it. */
 export const DEFAULT_FORM_SORT = 'squad' as const
@@ -196,6 +197,7 @@ const SORTABLE_FORM_FIELDS: Exclude<FormSortField, 'squad'>[] = [
   'mins',
   'xgi',
   'defcon',
+  'xp',
 ]
 
 export function parseFormSort(value: string | undefined): FormSort {
@@ -269,6 +271,20 @@ export type AppState = {
   asLeague?: string | null
   /** Fixture difficulty rating for the horizon views (section 6.7). */
   rating?: RatingSource | null
+  /**
+   * Scratch squad (section 7.7): players moved out, and their positionally
+   * paired replacements. Comma separated player IDs.
+   */
+  out?: string | null
+  in?: string | null
+  /**
+   * The squad player whose replacement panel is open, if any (section 7.7).
+   *
+   * Deliberately *not* carried between views, unlike `out`/`in`: the panel is
+   * a momentary act, and having it survive a tab switch would mean arriving on
+   * a new view with a dialogue already open over it.
+   */
+  swap?: string | null
 }
 
 /**
@@ -286,7 +302,7 @@ export type AppState = {
  */
 export type CarriedState = Pick<
   AppState,
-  'league' | 'rival' | 'as' | 'asLeague' | 'rating'
+  'league' | 'rival' | 'as' | 'asLeague' | 'rating' | 'out' | 'in'
 >
 
 /** Drops the view-as target, and the league list that fed it. */
@@ -310,6 +326,9 @@ export function buildHref({
   as,
   asLeague,
   rating,
+  out,
+  in: incoming,
+  swap,
 }: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
@@ -340,6 +359,15 @@ export function buildHref({
   }
   if (rating && rating !== DEFAULT_RATING) {
     params.set('rating', rating)
+  }
+  // Only ever written as a pair: one without the other describes no transfer,
+  // and `parseScratch` would discard it anyway.
+  if (out && incoming) {
+    params.set('out', out)
+    params.set('in', incoming)
+  }
+  if (swap) {
+    params.set('swap', swap)
   }
   return `/?${params.toString()}`
 }

@@ -92,6 +92,16 @@ export type FplElement = {
   defensive_contribution: number
   defensive_contribution_per_90: number
 
+  /**
+   * FPL's own expected points for the next gameweek (section 7.3).
+   *
+   * Typed as either, and parsed rather than read: it arrives as a string
+   * today, like `form` and `points_per_game`, but it is a number by nature and
+   * nothing stops FPL sending it as one. Every element carries a value, so a
+   * missing one would be a change worth noticing rather than a normal case.
+   */
+  ep_next: string | number
+
   /** Global ownership, for the Ownership view (section 7.4). */
   selected_by_percent: string
 

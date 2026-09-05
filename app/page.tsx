@@ -2,6 +2,7 @@ import { ClubBlocksTable } from '@/app/components/club-blocks-table'
 import { ErrorNotice } from '@/app/components/error-notice'
 import { FixturesLegend } from '@/app/components/fixtures-legend'
 import { FixturesTable } from '@/app/components/fixtures-table'
+import { FormLegend } from '@/app/components/form-legend'
 import { FormTable } from '@/app/components/form-table'
 import { HorizonSelector } from '@/app/components/horizon-selector'
 import { Suspense } from 'react'
@@ -12,6 +13,8 @@ import { ManagerIdForm } from '@/app/components/manager-id-form'
 import { OwnershipModeSelector } from '@/app/components/ownership-mode-selector'
 import { OwnershipTable } from '@/app/components/ownership-table'
 import { RatingToggle } from '@/app/components/rating-toggle'
+import { ReplacementPanel } from '@/app/components/replacement-panel'
+import { ScratchStrip } from '@/app/components/scratch-strip'
 import { SquadHeader } from '@/app/components/squad-header'
 import { ViewAsSelector } from '@/app/components/view-as-selector'
 import { ViewTabs } from '@/app/components/view-tabs'
@@ -39,6 +42,7 @@ import {
   globalPopulation,
   leagueMembers,
   leaguePopulation,
+  populationDirection,
   LEAGUE_MANAGER_CAP,
   referenceContext,
   rivalPopulation,
@@ -46,8 +50,28 @@ import {
   type ReferenceMode,
   type ReferencePopulation,
 } from '@/lib/fpl/reference'
-import { loadManagerLeagues, type Squad } from '@/lib/fpl/squad'
+import {
+  buildReplacements,
+  rankingFor,
+  type Replacement,
+} from '@/lib/fpl/replacements'
+import {
+  applyScratch,
+  parseScratch,
+  serialiseScratch,
+  withSwap,
+  withoutLastSwap,
+  type ScratchPair,
+  type ScratchSquad,
+} from '@/lib/fpl/scratch'
+import {
+  loadManagerLeagues,
+  squadPlayerFrom,
+  type Squad,
+  type SquadPlayer,
+} from '@/lib/fpl/squad'
 import { loadMatrixData, type MatrixData } from '@/lib/fpl/views'
+import { getBootstrap } from '@/lib/fpl/api'
 
 /**
  * The league population makes up to fifty `picks/` calls. They are cached for
@@ -103,6 +127,11 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const asId = parseEntityId(first(params.as))
   const asLeagueId = parseEntityId(first(params.asleague))
   const rating = parseRating(first(params.rating))
+  // Section 7.7. A malformed pair is dropped rather than raised, so a
+  // truncated link degrades to fewer changes and never to an error page.
+  const scratchPairs = parseScratch(first(params.out), first(params.in))
+  const swapFor = parseEntityId(first(params.swap))
+  const dismissedStale = first(params.stale) === 'ok'
   // An unparseable league or rival ID falls back to global rather than
   // erroring, per section 8.2.
   const ownershipMode = ownershipModeOf(
@@ -139,6 +168,9 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             asId={asId}
             asLeagueId={asLeagueId}
             rating={rating}
+            scratchPairs={scratchPairs}
+            swapFor={swapFor}
+            dismissedStale={dismissedStale}
           />
         ) : (
           <EmptyState />
@@ -160,6 +192,9 @@ async function MatrixSection({
   asId,
   asLeagueId,
   rating,
+  scratchPairs,
+  swapFor,
+  dismissedStale,
 }: {
   managerId: string
   view: ViewId
@@ -176,6 +211,12 @@ async function MatrixSection({
   asLeagueId: number | null
   /** Which fixture difficulty rating to score with (section 6.7). */
   rating: RatingSource
+  /** Modelled transfers, oldest first (section 7.7). */
+  scratchPairs: ScratchPair[]
+  /** Squad player whose replacement panel is open, if any. */
+  swapFor: number | null
+  /** The stale-pair notice has been dismissed for this link. */
+  dismissedStale: boolean
 }) {
   const myId = parseManagerId(managerId)
   // Viewing as yourself is the same as not viewing as anyone. Collapsing it
@@ -190,6 +231,7 @@ async function MatrixSection({
     as: viewedId === null ? null : String(viewedId),
     asLeague: asLeagueId === null ? null : String(asLeagueId),
     rating,
+    ...serialiseScratch(scratchPairs),
   }
 
   let data: MatrixData
@@ -233,8 +275,61 @@ async function MatrixSection({
     )
   }
 
+  // Cached, and already fetched inside `loadMatrixData`, so this is a cache
+  // read rather than a second trip to FPL.
+  const bootstrap = await getBootstrap()
+
+  // Section 7.7: from here down, `view` is the squad with the modelled
+  // transfers applied. No view knows it is looking at a scratch squad.
+  const scratch = applyScratch(
+    data.squad,
+    scratchPairs,
+    bootstrap,
+    (element, slot) => squadPlayerFrom(element, slot, bootstrap)
+  )
+  const viewData: MatrixData = { ...data, squad: scratch.squad }
+  const scratchPlayers = [...scratch.squad.startingXi, ...scratch.squad.bench]
+
+  const base = { id: managerId, view, horizon: data.horizon, sort: rawSort }
+
+  // Opening and closing the panel only ever changes `swap`; the plan and every
+  // other parameter ride through untouched.
+  const swapHref = (playerId: number) =>
+    buildHref({ ...base, ...carry, swap: String(playerId) })
+  const closePanelHref = buildHref({ ...base, ...carry })
+
+  const resetHref = buildHref({
+    ...base,
+    ...carry,
+    ...serialiseScratch([]),
+    swap: null,
+  })
+  const undoHref = buildHref({
+    ...base,
+    ...carry,
+    ...serialiseScratch(withoutLastSwap(scratch.applied)),
+    swap: null,
+  })
+  // Dismissing the stale notice must not touch the plan: it only records that
+  // the reader has seen it.
+  const dismissStaleHref = buildHref({
+    ...base,
+    ...carry,
+    ...serialiseScratch(scratch.applied),
+  })
+
   return (
     <div className="space-y-6">
+      {/* Sticky, so a warning created three swaps ago is still on screen when
+          the reader has stopped looking for it (section 7.7). */}
+      <ScratchStrip
+        scratch={scratch}
+        resetHref={resetHref}
+        undoHref={undoHref}
+        dismissHref={`${dismissStaleHref}&stale=ok`}
+        showDropped={!dismissedStale}
+      />
+
       <SquadHeader
         manager={data.squad.manager}
         totalPlayers={data.totalPlayers}
@@ -267,6 +362,28 @@ async function MatrixSection({
         sort={rawSort}
         carry={carry}
       />
+
+      {swapFor !== null && view !== 'clubs' && (
+        <ReplacementSection
+          outgoing={
+            scratchPlayers.find((player) => player.id === swapFor) ?? null
+          }
+          squad={scratchPlayers}
+          data={viewData}
+          bootstrap={bootstrap}
+          currentView={view}
+          rawSort={rawSort}
+          ownershipMode={ownershipMode}
+          leagueId={leagueId}
+          rivalId={rivalId}
+          myId={myId}
+          totalPlayers={data.totalPlayers}
+          scratch={scratch}
+          base={base}
+          carry={carry}
+          closeHref={closePanelHref}
+        />
+      )}
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -318,7 +435,7 @@ async function MatrixSection({
             blocks={buildClubBlocks({
               teams: data.teams,
               fixtures: data.fixtures,
-              squad: data.squad,
+              squad: viewData.squad,
               startGameweek: data.startGameweek,
               horizon: data.horizon,
               sort,
@@ -331,11 +448,13 @@ async function MatrixSection({
           />
         ) : view === 'form' ? (
           <FormTable
-            squad={data.squad}
+            squad={viewData.squad}
             managerId={managerId}
             sort={parseFormSort(rawSort ?? undefined)}
             horizon={data.horizon}
             carry={carry}
+            swapHref={swapHref}
+            overLimitTeamIds={scratch.warnings.overLimitTeamIds}
           />
         ) : view === 'ownership' ? (
           <>
@@ -381,23 +500,137 @@ async function MatrixSection({
               fallback={<OwnershipLoading mode={ownershipMode} />}
             >
               <OwnershipSection
-                squad={data.squad}
+                squad={viewData.squad}
                 totalPlayers={data.totalPlayers}
                 mode={ownershipMode}
                 leagueId={leagueId}
                 rivalId={rivalId}
+                swapHref={swapHref}
+                overLimitTeamIds={scratch.warnings.overLimitTeamIds}
               />
             </Suspense>
           </>
         ) : (
-          <FixturesTable view={data} />
+          <FixturesTable
+            view={viewData}
+            swapHref={swapHref}
+            overLimitTeamIds={scratch.warnings.overLimitTeamIds}
+          />
         )}
 
         {/* The legend explains fixture shading and the Fixture Score, neither
             of which the Form view shows. */}
         {usesHorizon(view) && <FixturesLegend rating={rating} />}
+        {view === 'form' && <FormLegend />}
       </section>
     </div>
+  )
+}
+
+/**
+ * The replacement panel for one squad player (section 7.7).
+ *
+ * Server side, because ranking every player in the position needs the whole
+ * bootstrap and, on the Fixtures view, a Fixture Score per club over the
+ * current horizon. Only the open panel is ever built, so this is one
+ * position's worth of rows rather than fifteen panels nobody asked for.
+ *
+ * The ranking follows the reader: whatever column they have sorted, or the
+ * view's own default. See `rankingFor`.
+ */
+async function ReplacementSection({
+  outgoing,
+  squad,
+  data,
+  bootstrap,
+  currentView,
+  rawSort,
+  ownershipMode,
+  leagueId,
+  rivalId,
+  myId,
+  totalPlayers,
+  scratch,
+  base,
+  carry,
+  closeHref,
+}: {
+  /** Null when the URL names a player who is not in the squad. */
+  outgoing: SquadPlayer | null
+  squad: SquadPlayer[]
+  data: MatrixData
+  bootstrap: Awaited<ReturnType<typeof getBootstrap>>
+  currentView: ViewId
+  rawSort: string | null
+  ownershipMode: ReferenceMode
+  leagueId: number | null
+  rivalId: number | null
+  myId: number
+  totalPlayers: number
+  scratch: ScratchSquad
+  base: { id: string; view: ViewId; horizon: number; sort: string | null }
+  carry: CarriedState
+  closeHref: string
+}) {
+  // A hand-edited or stale `swap` names nobody. Rendering nothing is right:
+  // the squad below is still correct and there is nothing to warn about.
+  if (outgoing === null) {
+    return null
+  }
+
+  // Only the Ownership view reads the direction, and only to decide which end
+  // of the ownership scale helps. Elsewhere it would be a wasted call.
+  const direction =
+    currentView === 'ownership'
+      ? await populationDirection({
+          mode: ownershipMode,
+          leagueId,
+          rivalId,
+          managerId: myId,
+          overallRank: data.squad.manager.overallRank,
+          totalPlayers,
+        })
+      : 'unknown'
+
+  const ranking = rankingFor(
+    currentView,
+    parseFormSort(rawSort ?? undefined),
+    data.horizon,
+    direction
+  )
+
+  const replacements: (Replacement & { href: string })[] = buildReplacements({
+    outgoing,
+    squad,
+    bootstrap,
+    fixtures: data.fixtures,
+    startGameweek: data.startGameweek,
+    horizon: data.horizon,
+    ranking,
+    available: scratch.budget.available,
+    overLimitTeamIds: scratch.warnings.overLimitTeamIds,
+  }).map((row) => ({
+    ...row,
+    // Selecting is a plain navigation, so the swap itself needs no
+    // JavaScript. The panel closes because `swap` is absent from the target.
+    href: buildHref({
+      ...base,
+      ...carry,
+      ...serialiseScratch(withSwap(scratch.applied, outgoing.id, row.id)),
+    }),
+  }))
+
+  return (
+    <ReplacementPanel
+      outgoingName={outgoing.name}
+      outgoingClub={outgoing.club}
+      outgoingPrice={outgoing.price}
+      position={outgoing.position}
+      rankingLabel={ranking.label}
+      available={scratch.budget.available}
+      replacements={replacements}
+      closeHref={closeHref}
+    />
   )
 }
 
@@ -548,12 +781,16 @@ async function OwnershipSection({
   mode,
   leagueId,
   rivalId,
+  swapHref,
+  overLimitTeamIds,
 }: {
   squad: Squad
   totalPlayers: number
   mode: ReferenceMode
   leagueId: number | null
   rivalId: number | null
+  swapHref: (playerId: number) => string
+  overLimitTeamIds: Set<number>
 }) {
   const players = [...squad.startingXi, ...squad.bench]
 
@@ -589,6 +826,8 @@ async function OwnershipSection({
       rows={compareOwnership(players, reference)}
       reference={reference}
       teamName={squad.manager.teamName}
+      swapHref={swapHref}
+      overLimitTeamIds={overLimitTeamIds}
     />
   )
 }

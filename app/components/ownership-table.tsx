@@ -1,3 +1,4 @@
+import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
 import {
   MATRIX_HEADER_HEIGHT,
   MATRIX_PLAYER_COLUMN,
@@ -64,10 +65,16 @@ export function OwnershipTable({
   rows,
   reference,
   teamName,
+  swapHref,
+  overLimitTeamIds,
 }: {
   rows: OwnershipRow[]
   reference: ReferencePopulation
   teamName: string
+  /** Opens the replacement panel for a player (section 7.7). Null disables it. */
+  swapHref: ((playerId: number) => string) | null
+  /** Clubs over the three-per-club limit, for the row accent (section 7.7). */
+  overLimitTeamIds: Set<number>
 }) {
   const startingXi = rows.filter((row) => row.player.squadPosition <= 11)
   const bench = rows.filter((row) => row.player.squadPosition > 11)
@@ -158,6 +165,8 @@ export function OwnershipTable({
                 row={row}
                 reference={reference}
                 position={position}
+                swapHref={swapHref}
+                overLimitTeamIds={overLimitTeamIds}
               />
             ))}
 
@@ -177,6 +186,8 @@ export function OwnershipTable({
                 row={row}
                 reference={reference}
                 position={position}
+                swapHref={swapHref}
+                overLimitTeamIds={overLimitTeamIds}
               />
             ))}
           </tbody>
@@ -216,10 +227,14 @@ function PlayerRow({
   row,
   reference,
   position,
+  swapHref,
+  overLimitTeamIds,
 }: {
   row: OwnershipRow
   reference: ReferencePopulation
   position: FieldPosition
+  swapHref: ((playerId: number) => string) | null
+  overLimitTeamIds: Set<number>
 }) {
   const band = ownershipBandOf(row.globalPercent)
   const isBench = row.player.squadPosition > 11
@@ -235,12 +250,13 @@ function PlayerRow({
     <tr className={MATRIX_ROW_HEIGHT}>
       <th
         scope="row"
-        className={`sticky left-0 z-10 border-b border-r border-neutral-200 px-3 py-1.5 text-left font-normal dark:border-neutral-800 ${rowBackground} ${PLAYER_COLUMN}`}
+        className={`sticky left-0 z-10 border-b border-r border-neutral-200 px-3 py-1.5 text-left font-normal dark:border-neutral-800 ${rowBackground} ${PLAYER_COLUMN} ${overLimitAccent(row.player.teamId, overLimitTeamIds)}`}
       >
         <span className="flex items-baseline gap-1.5">
-          <span className="truncate font-medium text-neutral-900 dark:text-neutral-100">
-            {row.player.name}
-          </span>
+          <PlayerName
+            name={row.player.name}
+            href={swapHref === null ? null : swapHref(row.player.id)}
+          />
           <span className="shrink-0 text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
             {row.player.club}
           </span>

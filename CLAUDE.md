@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.14; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.16; v1 feature complete).
 
 ## What this is
 
@@ -68,7 +68,7 @@ instances and deploys. Result: 1.65MB → 298KB response, 341KB cache entry, 6x
 under the limit.
 
 `events`, `teams` and `element_types` pass through whole (~35KB). `elements` is
-cut from ~100 fields to these 22 (`lib/fpl/projection.ts`):
+cut from ~100 fields to these 23 (`lib/fpl/projection.ts`):
 
 ```
 id, web_name, first_name, second_name, team, element_type,
@@ -76,6 +76,7 @@ now_cost, cost_change_event, cost_change_start,
 form, total_points, points_per_game, minutes,
 expected_goals, expected_assists, expected_goal_involvements,
 defensive_contribution, defensive_contribution_per_90,
+ep_next,
 selected_by_percent, status, news, chance_of_playing_next_round
 ```
 
@@ -83,6 +84,9 @@ selected_by_percent, status, news, chance_of_playing_next_round
 fields) and equals `defensive_contribution / minutes * 90`, so nothing needs
 deriving. It is a season average against a per-match threshold — see
 `lib/fpl/defcon.ts` for why that makes it a proxy, not a prediction.
+
+`ep_next` **arrives as a string** (`"5.0"`) — parsed in `squad.ts`, typed
+`string | number` since nothing stops FPL sending a number.
 
 **If a view needs a field that isn't listed, add it** to `FplElement` in
 `lib/fpl/types.ts`, to `projectElement`, and to this list. The projection picks
@@ -135,6 +139,33 @@ leave the other tables a pixel short of Fixtures, whose two-line fixture chip
 sets the real height. Each table also needs the **trailing spacer column**, or
 `w-full` shares the surplus out among the real columns.
 
+## Scratch squad (§7.7)
+
+`?out=427,318&in=351,290` — **a positionally paired diff, not a squad.** The
+base fifteen still load from FPL every request, so a shared link stays current
+instead of freezing a snapshot. `applyScratch` substitutes players into the
+loaded squad keeping squad position and armband, so **no view knows it is
+rendering a scratch squad**.
+
+- **A stale pair is dropped, never fatal** (`dropped`, with a dismissible
+  notice). A link saved before a rollover names players who have left.
+- **Duplicates are the one thing refused.** Over budget and 4-per-club are
+  legitimate intermediate states you can transfer your way out of; a duplicate
+  is not, and would silently leave 14 players. Owned rows are listed and
+  flagged but not clickable, and `applyScratch` drops a hand-edited one.
+- **Never filter the panel.** Unaffordable and club-limit rows stay, flagged.
+  It is a planning surface, not a validator.
+- Budget is `bank + sold - bought`. `bank`/`value` are **last-deadline**
+  figures that do not move with prices — the strip says so, and must keep
+  saying so.
+- `ReplacementPanel` is the **third and last** Client Component (after the
+  horizon control and `AutoSubmitSelect`): search filters as you type. Rows
+  are still server-built links, so the swap itself needs no JS.
+- Ranking follows the reader: the active column sort, else the view default
+  (`rankingFor`). Ownership needs the ahead/behind direction, which
+  `populationDirection` gets from one cached call rather than waiting on the
+  fifty-squad fan-out.
+
 ## URL state (§8.2) — read this before adding a control
 
 All params in `lib/fpl/params.ts`. **Every control is a link or a GET form, and
@@ -184,6 +215,7 @@ load-bearing:
 | `reference.ts` | Ownership populations, `compareOwnership()`, `leagueMembers()` |
 | `concurrency.ts` | the bounded fan-out for league mode |
 | `http.ts` | route-handler helpers |
+| `replacements.ts` | ranked replacement candidates (§7.7) |
 
 | Client-safe (**must not** import `server-only`) | |
 |---|---|
@@ -192,6 +224,7 @@ load-bearing:
 | `ownership.ts` | bands, direction flag, strategy ordering of the bands |
 | `defcon.ts` | DefCon thresholds + bar ratio (§7.3) |
 | `difficulty.ts` | the two fixture difficulty ratings (§6.7) |
+| `scratch.ts` | the scratch-squad diff, budget and warnings (§7.7) |
 | `availability.ts` | status-code mapping |
 | `lib/format.ts` | price, rank, points |
 
@@ -274,6 +307,11 @@ Rows are the 15 players except where noted.
 
    Headers are centred except Player; data is centred except Player and the bar
    columns, whose numbers stay right-aligned against the end of their own bar.
+
+   **`xP (FPL)` is FPL's `ep_next`, not ours** — the header says whose it is
+   because a number in our table reads as our number. Far right, ruled off, and
+   **no bar on purpose**: it summarises the columns to its left, so a bar would
+   set it competing with its own inputs. `FormLegend` carries the disclaimer.
 
    Availability is a dot before the name + tinted row + optional news line, not
    columns. Mapping in `lib/fpl/availability.ts`; unknown codes fail to "out".

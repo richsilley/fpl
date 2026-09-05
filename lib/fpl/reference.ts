@@ -3,7 +3,12 @@ import 'server-only'
 import { getBootstrap, getEntry, getLeagueStandings, getPicks } from './api'
 import { mapWithConcurrency } from './concurrency'
 import { FplApiError } from './errors'
-import { fieldStanding, parseOwnership, type FieldStanding } from './ownership'
+import {
+  fieldStanding,
+  parseOwnership,
+  type FieldPosition,
+  type FieldStanding,
+} from './ownership'
 import type { SquadPlayer } from './squad'
 import type { FplEvent } from './types'
 
@@ -235,6 +240,61 @@ function countOwners(squads: { element: number }[][]): Map<number, number> {
 
 function percentOf(count: number, size: number): number {
   return size < 1 ? 0 : (count / size) * 100
+}
+
+/**
+ * Just the ahead-or-behind call for a population, without building it.
+ *
+ * The replacement panel (section 7.7) ranks Ownership by whichever end of the
+ * scale helps the reader's position, so it needs the direction — but it must
+ * not wait on the fifty-squad fan-out that produces the ownership figures. The
+ * direction only depends on a rank, and every mode can get one from a single
+ * call that the Ownership view has already cached.
+ */
+export async function populationDirection({
+  mode,
+  leagueId,
+  rivalId,
+  managerId,
+  overallRank,
+  totalPlayers,
+}: {
+  mode: ReferenceMode
+  leagueId: number | null
+  rivalId: number | null
+  managerId: number
+  overallRank: number | null
+  totalPlayers: number
+}): Promise<FieldPosition> {
+  try {
+    if (mode === 'league' && leagueId !== null) {
+      const standings = await getLeagueStandings(leagueId, 1)
+      const entries = standings.standings.results.slice(0, LEAGUE_MANAGER_CAP)
+      const position = entries.findIndex((entry) => entry.entry === managerId)
+      return fieldStanding(
+        position === -1 ? null : position + 1,
+        entries.length
+      ).position
+    }
+
+    if (mode === 'rival' && rivalId !== null) {
+      const rival = await getEntry(rivalId)
+      const rivalRank = rival.summary_overall_rank
+      const rank =
+        overallRank === null || rivalRank === null
+          ? null
+          : overallRank <= rivalRank
+            ? 1
+            : 2
+      return fieldStanding(rank, 2).position
+    }
+
+    return fieldStanding(overallRank, totalPlayers).position
+  } catch {
+    // The panel is still useful ranked the default way round, and an ordering
+    // is not worth an error page.
+    return 'unknown'
+  }
 }
 
 /** One entry in the rival dropdown (section 7.4). */

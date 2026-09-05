@@ -1,4 +1,5 @@
 import { FixtureCell, ScoreBadge } from '@/app/components/fixture-visuals'
+import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
 import {
   MATRIX_HEADER_HEIGHT,
   MATRIX_PLAYER_COLUMN,
@@ -35,7 +36,17 @@ function gameweekColumnWidth(count: number): string {
   return 'w-[3.25rem] min-w-[3.25rem]'
 }
 
-export function FixturesTable({ view }: { view: MatrixData }) {
+export function FixturesTable({
+  view,
+  swapHref,
+  overLimitTeamIds,
+}: {
+  view: MatrixData
+  /** Opens the replacement panel for a player (section 7.7). Null disables it. */
+  swapHref: ((playerId: number) => string) | null
+  /** Clubs over the three-per-club limit, for the row accent (section 7.7). */
+  overLimitTeamIds: Set<number>
+}) {
   const { squad, startGameweek, horizon } = view
 
   // The horizon drives the columns, not just the score: selecting five
@@ -108,6 +119,8 @@ export function FixturesTable({ view }: { view: MatrixData }) {
               view={view}
               columns={columns}
               gwColumn={GW_COLUMN}
+              swapHref={swapHref}
+              overLimitTeamIds={overLimitTeamIds}
             />
           ))}
 
@@ -128,6 +141,8 @@ export function FixturesTable({ view }: { view: MatrixData }) {
               view={view}
               columns={columns}
               gwColumn={GW_COLUMN}
+              swapHref={swapHref}
+              overLimitTeamIds={overLimitTeamIds}
               isBench
             />
           ))}
@@ -142,6 +157,8 @@ function PlayerRow({
   view,
   columns,
   gwColumn,
+  swapHref,
+  overLimitTeamIds,
   isBench = false,
 }: {
   player: SquadPlayer
@@ -149,6 +166,8 @@ function PlayerRow({
   /** The horizon window, not every gameweek. Set by the table. */
   columns: number[]
   gwColumn: string
+  swapHref: ((playerId: number) => string) | null
+  overLimitTeamIds: Set<number>
   isBench?: boolean
 }) {
   const { fixtures, startGameweek, horizon } = view
@@ -164,12 +183,13 @@ function PlayerRow({
     <tr className={MATRIX_ROW_HEIGHT}>
       <th
         scope="row"
-        className={`sticky left-0 z-10 border-b border-neutral-100 px-3 py-1.5 text-left font-normal dark:border-neutral-800/70 ${rowBackground} ${PLAYER_COLUMN}`}
+        className={`sticky left-0 z-10 border-b border-neutral-100 px-3 py-1.5 text-left font-normal dark:border-neutral-800/70 ${rowBackground} ${PLAYER_COLUMN} ${overLimitAccent(player.teamId, overLimitTeamIds)}`}
       >
         <span className="flex items-baseline gap-1.5">
-          <span className="truncate font-medium text-neutral-900 dark:text-neutral-100">
-            {player.name}
-          </span>
+          <PlayerName
+            name={player.name}
+            href={swapHref === null ? null : swapHref(player.id)}
+          />
           <span className="shrink-0 text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
             {player.club}
           </span>

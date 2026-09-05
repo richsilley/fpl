@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.14
+**Version:** 1.16
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -92,10 +92,13 @@ now_cost, cost_change_event, cost_change_start,
 form, total_points, points_per_game, minutes,
 expected_goals, expected_assists, expected_goal_involvements,
 defensive_contribution, defensive_contribution_per_90,
+ep_next,
 selected_by_percent, status, news, chance_of_playing_next_round
 ```
 
 `defensive_contribution_per_90` is supplied by the API as a number and equals `defensive_contribution / minutes * 90`, so it needs no derivation. It is a season average against a per-match threshold; see 7.3 for why that makes it a proxy rather than a prediction.
+
+`ep_next` **arrives as a string**, like `form` and `points_per_game`, and is parsed rather than read. It is typed to accept either, since the field is numeric by nature and nothing stops FPL sending it as a number. Every element carries a value, so a missing one would be a change worth noticing rather than a normal case.
 
 **Retained in full:** `teams`, `element_types`, `events`. These are small and the views depend on them.
 
@@ -329,7 +332,7 @@ The control is a two-step cascade — **View as → from league → team** — a
 
 **Question answered:** who is playing well, and who is at risk?
 
-Columns, in order: price, price change this gameweek, price change since season start, total points, points per game, form, minutes, expected goal involvements, and defensive contribution per 90.
+Columns, in order: price, price change this gameweek, price change since season start, total points, points per game, form, minutes, expected goal involvements, defensive contribution per 90, and FPL's expected points for the next gameweek.
 
 Availability should be visually obvious. Red for out, amber for doubtful with the percentage chance shown, no flag for available.
 
@@ -341,7 +344,7 @@ Every column here is a number, and presented flat they read as a wall of them. T
 
 **No change renders as an empty cell, not a dash.** Most players have not moved in a given week, and a column of placeholders hides the handful of rows that did.
 
-**Column order:** Price, GW, Season, Pts, PPG, Form, Mins, xGI, DefCon. The bar columns are grouped at the end so the only wide columns in the table sit together rather than being interleaved with tight ones.
+**Column order:** Price, GW, Season, Pts, PPG, Form, Mins, xGI, DefCon, xP (FPL). The bar columns are grouped together so the only wide columns in the table sit together rather than being interleaved with tight ones, and xP sits past them at the far right, ruled off.
 
 **Alignment.** Every header except Player is centred, and every data cell is centred except Player and the bar columns. The bar columns keep their numbers right-aligned: centring one would set it adrift from the end of its own bar, which is the one place in the table where a value has a length to sit against.
 
@@ -393,9 +396,21 @@ The sort lives in the `sort` URL parameter, shared with Club Blocks (8.2). The t
 
 **Five API status codes collapse to the three states above.** `a` is available; `d` is doubtful; `i` injured, `s` suspended and `u` unavailable are all out, as is `n` and anything unrecognised. Defaulting an unknown code to out rather than available is deliberate: showing an unfit player as fit is the more costly error. Percentages come from `chance_of_playing_next_round`, which is occasionally null even for a doubt, so fall back to the word.
 
-**Price movements are signed and coloured by direction,** green for a rise and red for a fall, consistent with 6.4's rule that green means good: a rise lifts the owner's team value. No change renders as an em dash rather than a zero, so the eye goes to the movements. Both movement fields are in tenths like the price itself (constraint 4).
+**Price movements are signed and coloured by direction,** green for a rise and red for a fall, consistent with 6.4's rule that green means good: a rise lifts the owner's team value. No change renders as an empty cell, not a dash or a zero (see 7.3.1), so the eye goes only to what moved. Both movement fields are in tenths like the price itself (constraint 4).
 
 This view has no horizon and no Fixture Score, so the horizon control (7.6) and the fixture colour legend are not shown on it. The `horizon` parameter is still carried through the view switcher, so returning to Fixtures or Club Blocks restores the horizon the user left.
+
+#### 7.3.3 xP (FPL)
+
+FPL's own expected points for the next gameweek, from `ep_next`. **Not this app's number**, and the header says so: `xP (FPL)`, not `xP`. A figure sitting in this app's table is naturally read as this app's figure, and this one is a third party's prediction.
+
+Far right, past the bar columns and ruled off from them.
+
+**No data bar, deliberately.** Every bar to its left is an input the reader weighs for themselves. This is FPL's summary of those same inputs, so a bar would set it competing with the columns it is derived from instead of reading as a conclusion drawn after them.
+
+Sortable like the other numeric columns.
+
+**The legend says whose number it is.** The Form view had no legend before this column; it has one now, because the disclaimer has to live somewhere a reader will find it without hovering a header.
 
 ### 7.4 View 3 — Ownership
 
@@ -512,6 +527,57 @@ Shared by the Fixtures and Club Blocks views. Both must read from the same `hori
 
 A horizon of 1 is valid and useful. The normalised Fixture Score (6.1.1) makes a single-gameweek reading directly comparable to a ten-gameweek one.
 
+### 7.7 Scratch squad editing
+
+Modelling transfers that have not been made. **Nothing persists server-side and no login is involved.**
+
+#### The URL holds a diff, not a squad
+
+`?id=2695180&out=427,318&in=351,290` — two positionally paired lists of player IDs.
+
+The base fifteen still load from FPL on every request, so the scratch squad stays current: prices, form and availability keep updating underneath the changes, and a link shared today shows today's data rather than a snapshot of whenever it was made. Storing the resulting squad would have frozen it, and put fifteen IDs in every URL to express what is usually a single move.
+
+- The scratch squad **persists across every view switch**, so `out` and `in` are carried like any other parameter (8.2)
+- A **reset** control clears all changes; **undo** removes the most recent pair
+- **A stale pair is dropped, never fatal.** After a gameweek rolls over, a saved link can name a player who has left the squad. Drop the pair, show a dismissible notice, and render the rest of the plan
+
+#### Replacement panel
+
+Clicking a player's name opens it. The name is the target because it already identifies the player; a replace button on every row would add fifteen controls to a table whose point is density.
+
+- **Same position only**, and **every player in the game**, not a shortlist
+- **Ranked by the metric of the current view**, reusing the column sort when one is applied. The panel opens ordered by the question the reader was asking a moment ago
+- Defaults per view: Fixtures by Fixture Score over the current horizon, Form by form, Ownership by ownership with the direction set by whether the manager is ahead of or behind the population (7.4)
+- Each row shows name, club, price, and the **signed cost difference**: `+£3.2m`, `−£0.5m`, `level`
+- A secondary line carries `ep_next` (7.3.3)
+- **"Only show what I can afford"**, default off
+- **A search box filters by player or club in one field.** "bruno" finds every Bruno, "haaland" finds Haaland, "arsenal" finds every Arsenal player. One box, not a field selector
+- Selecting performs the swap and closes the panel
+
+#### Do not filter or hide
+
+**Unaffordable players and players who would breach the three-per-club limit must still appear**, with the cost difference shown and a flag.
+
+This is a planning surface, not a validator. Invalid intermediate states are legitimate: the reader may be part-way through funding a move, and the app cannot know which of four players from one club they intend to drop. FPL itself rejects an invalid *final* squad. **The job is to make problems impossible to miss, not impossible to create.**
+
+**The one exception is a duplicate player.** Already-owned players are listed and flagged, but are not selectable. Unlike being over budget or over the club limit, there is no further transfer that makes a duplicate legal — FPL has no concept of one — and taking it would silently leave a fourteen-player squad. A hand-edited URL that asks for one has the pair dropped, with the same notice as a stale pair.
+
+#### Budget
+
+`available = bank + value of players sold − cost of players bought`, recalculated after every swap so the cost annotations update as a move is funded.
+
+`bank` and `value` come from `picks.entry_history`. **These are last-deadline figures and lag price changes, and the UI says so.** FPL does not republish them as prices move. Selling prices in FPL also depend on the purchase price, which is not in any payload here, so the sold value uses the current price and the figure is an estimate either way.
+
+#### Warnings
+
+A persistent summary strip, always visible, not scrolled away — so it is sticky rather than merely placed at the top. Over budget and a fourth player from one club are both conditions that can be created three swaps earlier and only discovered when the transfers are made for real.
+
+- **"Over budget by £0.8m"** when available funds go negative
+- **"4 Sunderland players"** when any club exceeds three
+- When a club is over the limit, **highlight every row for that club**, not just the newest, since any of them could be the one dropped. The mark is an accent down the frozen player column, so it survives horizontal scrolling on a phone and does not collide with the availability tints in 7.3
+
+**Warnings are informational and never block a swap.**
+
 ## 8. Technical requirements
 
 ### 8.1 Architecture
@@ -552,6 +618,9 @@ This makes every view shareable by construction and removes the need for account
 | `as` | Manager whose squad is shown, when not `id` | None. Shows the user's own squad |
 | `asleague` | League the view-as picker is listing | None. No team dropdown yet |
 | `rating` | `fpl` or `custom` difficulty (6.7) | `fpl`, FPL's own rating |
+| `out` | Player IDs transferred out, comma separated (7.7) | None. No changes modelled |
+| `in` | Their positionally paired replacements (7.7) | None |
+| `swap` | Squad player whose replacement panel is open (7.7) | None. Panel closed |
 
 `league` and `rival` select the Ownership view's reference population. They are **not** mutually exclusive: a URL carrying both means "compare against this rival, chosen from this league", and `rival` is the population. `league` alone is league mode. See 7.4 for why the league is kept.
 

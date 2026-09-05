@@ -38,8 +38,13 @@ export type ClubBlock = {
   owned: SquadPlayer[]
 }
 
-/** The FPL rule the owned count exists to surface (section 7.5). */
-export const MAX_PLAYERS_PER_CLUB = 3
+/**
+ * The FPL rule the owned count exists to surface (section 7.5).
+ *
+ * Re-exported from `scratch.ts`, which needs it too and, unlike this module,
+ * must stay importable from the client.
+ */
+export { MAX_PLAYERS_PER_CLUB } from './scratch'
 
 export function buildClubBlocks({
   teams,

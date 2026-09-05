@@ -67,6 +67,9 @@ function projectElement(element: FplElement): FplElement {
     defensive_contribution: element.defensive_contribution,
     defensive_contribution_per_90: element.defensive_contribution_per_90,
 
+    // FPL's own expected points for the next gameweek, section 7.3
+    ep_next: element.ep_next,
+
     // Ownership, section 7.4
     selected_by_percent: element.selected_by_percent,
 

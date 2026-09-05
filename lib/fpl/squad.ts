@@ -46,6 +46,14 @@ export type SquadPlayer = {
   /** The same per 90 minutes, straight from the API. See DefCon in 7.3. */
   defensiveContributionPer90: number
   /**
+   * **FPL's** expected points for the next gameweek, not ours (section 7.3).
+   *
+   * Parsed on the way in rather than kept as the API's string, because unlike
+   * `form` and `pointsPerGame` there is no upstream formatting worth
+   * preserving: it is one decimal place either way.
+   */
+  expectedPointsNext: number
+  /**
    * Percentage of all FPL managers owning this player, as the API's string.
    * The global reference population for the Ownership view (section 7.4).
    */
@@ -75,6 +83,17 @@ export type SquadManager = {
   gameweekRank: number | null
   /** Season points total as at the gameweek shown. */
   overallPoints: number
+  /**
+   * Money in the bank, in tenths (constraint 4). The starting point for the
+   * scratch-squad budget (section 7.7).
+   *
+   * A **last-deadline** figure: FPL does not republish it as prices move, so
+   * it is right at the moment the gameweek locked and drifts from then on.
+   * The UI has to say so rather than presenting it as live.
+   */
+  bank: number
+  /** Squad value at that same deadline, in tenths. Same lag as `bank`. */
+  squadValue: number
   gameweek: number
   /**
    * The manager's own mini leagues, so the Ownership view can offer them
@@ -135,6 +154,8 @@ export async function loadSquad(managerId: number): Promise<Squad> {
       overallRank: picks.entry_history.overall_rank,
       gameweekPoints: picks.entry_history.points,
       gameweekRank: picks.entry_history.rank,
+      bank: picks.entry_history.bank,
+      squadValue: picks.entry_history.value,
       overallPoints: picks.entry_history.total_points,
       gameweek,
       leagues: classicLeagues(entry),
@@ -142,6 +163,46 @@ export async function loadSquad(managerId: number): Promise<Squad> {
     startingXi: players.filter((player) => player.squadPosition <= 11),
     bench: players.filter((player) => player.squadPosition > 11),
   }
+}
+
+/**
+ * Builds a squad row for a player who is not in the picks payload.
+ *
+ * The scratch squad (section 7.7) substitutes players the manager has not
+ * actually bought, so there is no `pick` for them. Everything else about the
+ * row is identical, which is what lets every view render a scratch squad
+ * without knowing it is one.
+ *
+ * Exported so `scratch.ts` can stay free of `server-only` — it is handed this
+ * as a callback rather than importing the loader.
+ */
+export function squadPlayerFrom(
+  element: FplElement,
+  slot: Pick<SquadPlayer, 'squadPosition' | 'isCaptain' | 'isViceCaptain'>,
+  bootstrap: FplBootstrap
+): SquadPlayer {
+  return toSquadPlayer(
+    element,
+    {
+      position: slot.squadPosition,
+      is_captain: slot.isCaptain,
+      is_vice_captain: slot.isViceCaptain,
+    },
+    bootstrap
+  )
+}
+
+/**
+ * `ep_next` as a number.
+ *
+ * The API sends `"5.0"` today, but the field is numeric by nature and nothing
+ * stops it arriving as `5`, so both are accepted. Anything unreadable becomes
+ * 0, which renders as a real "0.0" — correct, since FPL genuinely predicts
+ * zero for anyone not expected to play.
+ */
+function parseExpectedPoints(value: string | number): number {
+  const parsed = typeof value === 'number' ? value : Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 /**
@@ -206,6 +267,7 @@ function toSquadPlayer(
     expectedGoalInvolvements: element.expected_goal_involvements,
     defensiveContribution: element.defensive_contribution,
     defensiveContributionPer90: element.defensive_contribution_per_90,
+    expectedPointsNext: parseExpectedPoints(element.ep_next),
     selectedByPercent: element.selected_by_percent,
     squadPosition: pick.position,
     isCaptain: pick.is_captain,
