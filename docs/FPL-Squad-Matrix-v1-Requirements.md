@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.16
+**Version:** 1.17
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -213,56 +213,135 @@ Blanks and doubles do not exist in the fixture list at the start of a season. Th
 
 Distance decay, weighting nearer gameweeks more heavily than distant ones, is deliberately excluded from v1. It is closer to how managers actually think but introduces a tuning parameter and makes the number harder to explain.
 
-### 6.7 Custom difficulty rating
+### 6.7 Difficulty rating: three modes
 
-FPL's FDR is set before a ball is kicked and never moves. A promoted side that turns out to be decent keeps its easy rating all season; a big club in freefall keeps its hard one. An alternative rating, derived from results, is offered alongside it and **toggled per 8.2 so a shared link carries which one produced it**.
+FPL's FDR is set before a ball is kicked and never moves. A promoted side that turns out to be decent keeps its easy rating all season; a big club in freefall keeps its hard one. Two derived alternatives sit alongside it, **toggled per 8.2 so a shared link carries which one produced it**.
 
-**FPL's own rating is the default.** Nobody is shown a derived number without having asked for it.
+| `rating=` | Matrix colour | Fixture Score | Team Strength |
+|---|---|---|---|
+| `fpl` *(default)* | FPL integers | from FPL FDR | ours |
+| `form` | `plainFDR` | from `plainFDR` | ours |
+| `blend` | `blendFDR` | **from `plainFDR`** | ours |
+
+**FPL's own rating is the default.** Nobody is shown a derived number without having asked for it. An unrecognised value falls back to `fpl`, which includes the retired `custom` from the previous two-mode version.
+
+**Fixture Score never uses `blendFDR`, in any mode.** In blend mode it shows exactly what form mode shows. If it blended, it and the Team Strength column beside it would both carry team quality, and the view would be counting the same thing twice within one row. **Blend mode changes matrix colours and nothing else.**
+
+This is enforced structurally rather than by convention: a rating is a *pair* of functions, `colour` and `score`, so the separation cannot be lost by someone reading the wrong field.
+
+**Team Strength is always this app's figure, in every mode including `fpl`,** because FPL publishes nothing form-aware to put in that column. The column is labelled *(ours)* so it is not mistaken for an FPL number while the toggle reads FPL.
 
 #### Data
 
-Everything comes from `fixtures/`, which every view already loads. `team_h_score`, `team_a_score` and `finished` are enough to reconstruct both the table and recent form. **No new endpoints, and no new fields in the `elements` projection.**
+Everything comes from `fixtures/`, which every view already loads. `team_h_score`, `team_a_score` and `finished` reconstruct both the table and recent form. **No new endpoints, and no new fields in the `elements` projection.**
 
-**The `teams` array's own `played`, `points` and `position` are not populated by FPL** — they sit at zero or null all season — so they are ignored and the results are counted from the fixtures instead. `strength` is likewise null; `strength_overall_home` and `strength_overall_away` *are* populated and are what the prior reads. Those two were already in the payload, since `teams` passes through the projection whole (5.3); only the type had not named them.
+**The `teams` array's own `played`, `points` and `position` are never populated by FPL** — they sit at zero all season — so results are counted from the fixtures instead. `strength` is likewise null; `strength_overall_home` and `strength_overall_away` *are* populated, and are the pre-season prior.
 
-#### The model
+#### Constants
 
-For each club:
+Declared at the top of `difficulty.ts` and never inlined. These are the numbers to revisit once a few gameweeks have been watched.
+
+| Constant | Value | Why |
+|---|---|---|
+| `ALPHA` | 0.5 | Own-strength weight when blending. Half means the opponent matters twice as much as you do, which is the right order: who you play swings a fixture more than who you are |
+| `PRIOR_WEIGHT` | 10 | Shrinkage for club strength, in matches. Observed form only reaches parity with the prior at ten matches, and the window caps at six, so the prior always keeps the larger share |
+| `HOME_ADVANTAGE_PRIOR` | 0.33 | Historical Premier League home advantage, in points per game |
+| `HA_PRIOR_WEIGHT` | 60 | Shrinkage for home advantage. Far larger than `PRIOR_WEIGHT` because the historical figure is well established while a season's own is noisy for a long time |
+| `FORM_WINDOW` | 6 | Matches in the form window |
+| `GD_BLEND` | 0.6 | Weight on goal difference against points |
+| `GD_TO_PPG` | 0.55 | Converts goal difference per game onto the points-per-game scale |
+| `SEASON_PRIOR_MIN` | 8 | Matches before the prior switches from FPL's strength to the club's own season form |
+
+#### Stage 1: club strength
+
+Computed once per request for all twenty clubs.
 
 ```
-observed = points per game over their last 6 completed matches
-prior    = FPL's overall strength, mapped onto the same points-per-game scale
-weight   = played / (played + 6)
-strength = weight x observed + (1 - weight) x prior
+leagueMeanPPG = total points awarded / total team-matches played
+window        = that club's last FORM_WINDOW completed matches
+n             = matches in window (caps at FORM_WINDOW)
+GDpg          = goal difference per match, within window
+PPG           = points per match, within window
+
+observed = GD_BLEND x (leagueMeanPPG + GD_TO_PPG x GDpg)
+         + (1 - GD_BLEND) x PPG
+
+prior    = season-to-date PPG   if played >= SEASON_PRIOR_MIN
+           FPL strength mapped  otherwise
+
+w        = n / (n + PRIOR_WEIGHT)
+strength = w x observed + (1 - w) x prior
 ```
 
-**Early in the season the rating is mostly the prior, and that is deliberate.** After two matches `weight` is 0.25, so three quarters of a club's rating is still FPL's pre-season opinion. Two results are not evidence, and a rating that swung wildly on them would be worse than the static one it replaces. Confidence in the observed record grows with the season: two thirds by GW12, six sevenths by GW38.
+**The weight counts matches in the window, not matches played.** The window caps at six, so the weight caps with it: 0.167 at two matches, 0.375 once the window fills, and flat from GW7 to GW38. An earlier version divided by matches played and climbed to 0.86, which meant trusting the same six matches more in May than in October — confidence rising while the evidence behind it stood still.
 
-**The six-match window is what lets a rating fall when form does.** `weight` only ever rises, so if `observed` read the whole season a club's rating would converge and then freeze — which is the exact failing of the static FDR. Reading form over a rolling window means a good side on a bad run becomes easier to play, and the rating still says something current at GW38.
+**The prior becomes the club's own season form once there is enough of it.** FPL's strengths are set pre-season and never update, so anchoring to them in April is anchoring to a July guess. Below `SEASON_PRIOR_MIN` there is not yet a season to anchor to, and the pre-season view is the best available.
 
-Note that `weight` counts *all* matches played while `observed` reads only the last six. That is not an inconsistency: how confident we are grows with the whole season's evidence, while what we are confident about is the club's current form.
+**Observed form blends goal difference with points.** After two matches PPG has six possible values and throws the margin away. Brighton at 7:4 and Ipswich at 4:8 are both on three points and are not the same team. Goal difference is recentred on the league mean so both halves of the blend sit on one scale.
 
-#### Home advantage
+#### Stage 2: home advantage
 
-One figure for the division, measured from all completed fixtures as total home points minus total away points per match, applied as a **constant offset** rather than by splitting each club's record.
+One figure for the division. **Do not split each club's record by venue** — that halves the sample for no gain, and half a season gives a club only nine or ten home games.
 
-Half a season gives a club nine or ten home games, far too few to separate a real home effect from noise, while the league-wide figure has hundreds of matches behind it. The offset is split evenly either side, so the league's mean difficulty is unchanged: playing the away side is easier by as much as playing the home side is harder.
+```
+observed = (total home points - total away points) / matches played
+w        = matchesPlayed / (matchesPlayed + HA_PRIOR_WEIGHT)
+HA_ppg   = w x observed + (1 - w) x HOME_ADVANTAGE_PRIOR
+HA_fdr   = HA_ppg x 4 / (maxStrength - minStrength)
+```
 
-Early in the season this figure is itself noisy and will be larger than it ends up. It settles as matches accumulate, on the same principle as everything else here.
+Shrunk exactly as club strength is, and for the same reason. Twenty matches into a season the raw figure read 0.600 points per game, roughly double the historical value; taking that at face value would have overstated every home fixture in the table. Shrunk, it lands at 0.397.
 
-#### Output
+#### Stage 3: fixture difficulty
 
-Strength is mapped **linearly across the twenty clubs onto 1 to 5**, fractions allowed, with a strong opponent scoring high to match FPL's convention. The venue offset is then applied and the result clamped to 1–5.
+```
+oppFDR   = 1 + 4 x (strength[opponent] - min) / (max - min)
+ownFDR   = the same mapping applied to the club itself
 
-**Clamping costs something and is still right.** The strongest club reads 5 whether at home or away, so its home advantage is invisible. The alternative — widening the scale to fit the offset — would mean no club ever reached either end of it, which is worse.
+plainFDR = oppFDR
+blendFDR = 3 + ((oppFDR - 3) - ALPHA x (ownFDR - 3)) / (1 + ALPHA)
 
-**Nothing downstream changes.** Fixture Score, the colour bands and Club Blocks all read the same field they always did; only the number in it differs. The one adjustment is that cell shading rounds to the nearest band, since a fractional rating would otherwise match no band at all. The five bands themselves are untouched.
+venue    : subtract HA_fdr/2 at home, add HA_fdr/2 away
+clamp    : [1, 5]
+```
 
-**Both horizon views share one rating.** It is chosen once, in the URL, and one fixture index is built from it, so Fixtures and Club Blocks cannot disagree about a club.
+Mapped linearly across the twenty clubs so the scale always spans 1 to 5. Not inverted: a strong opponent is a *high* number, FPL's convention and what `6 - FDR` expects.
+
+**Clamping costs something and is still right.** The strongest club reads 5 whether home or away, so its venue swing is invisible. Widening the scale to fit the offset instead would mean no club ever reached either end of it, which is worse.
+
+#### What blend mode does to a row, and why it is not a bug
+
+Subtracting the venue term, which cancels, the difference between the two ratings is exactly:
+
+```
+blendFDR - plainFDR = -(ALPHA / (1 + ALPHA)) x ((oppFDR - 3) + (ownFDR - 3))
+```
+
+Verified against the implementation to a worst-case error of 6e-16 across every unclamped cell.
+
+Three consequences, all expected:
+
+1. **Blending cannot reorder a row.** `blendFDR` is an increasing function of `oppFDR`, so a club's easiest fixture stays its easiest. What changes is where the row sits relative to other rows, not the pattern inside it.
+2. **A club far from average moves as a block.** Arsenal and Manchester City, at the top of the scale, have every one of their 34 cells move down. Coventry, at the bottom, has every cell move up.
+3. **A club near average does not, and cannot.** The shift depends on the *sum* of both terms, so for a club at `ownFDR ≈ 3` the own term vanishes and only the compression by `1 / (1 + ALPHA)` is left, which pulls easy fixtures up and hard fixtures down. Mid-table rows therefore show cells moving both ways. **This is the formula behaving correctly, not a defect**: the mean shift is still in the right direction (Chelsea −0.29, Crystal Palace +0.36), and the ordering within the row is untouched.
+
+#### Club Blocks: Team Strength
+
+```
+teamStrength = 10 x (strength[club] - min) / (max - min)
+```
+
+Immediately right of Fixture Score, on the same 0 to 10 scale with the same colour bands, so the two read as a pair: how good the run is, and how good the club is. An easy run for a weak side is a different proposition from an easy run for a strong one. Sortable, one decimal place.
+
+#### Matrix cells
+
+**Cells show opponent and venue only. Never a difficulty number, in any mode.** Each cell already carries two pieces of information and a third is unreadable across 36 columns at 380px.
+
+The number is behind hover on desktop and tap on mobile. Tap works because the chip carries `tabindex="-1"`: focusable by pointer, skipped by the keyboard. A full fixture table is 540 cells, and putting every one in the tab order would wreck keyboard navigation for the sake of a figure the `title` and the screen-reader text already carry.
 
 #### Deferred
 
-Goal difference and margin of victory are ignored: points per game is what the league table runs on and what managers already think in. Attack and defence strengths are ignored too, so the rating cannot say a club is hard to score against but easy to beat.
+Attack and defence strengths are still ignored, so the rating cannot say a club is hard to score against but easy to beat.
 
 ## 7. Functional requirements
 

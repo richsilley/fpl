@@ -1,6 +1,10 @@
 import Link from 'next/link'
 
-import { FixtureCell, ScoreBadge } from '@/app/components/fixture-visuals'
+import {
+  FixtureCell,
+  ScoreBadge,
+  scoreTone,
+} from '@/app/components/fixture-visuals'
 import { MAX_PLAYERS_PER_CLUB, type ClubBlock } from '@/lib/fpl/clubs'
 import { horizonGameweeks, type Horizon } from '@/lib/fpl/fixtures'
 import {
@@ -33,6 +37,7 @@ import {
  */
 const CLUB_COLUMN = 'w-[9.5rem] min-w-[9.5rem] sm:w-52 sm:min-w-52'
 const SCORE_COLUMN = 'hidden sm:table-cell w-24 min-w-24'
+const STRENGTH_COLUMN = 'hidden sm:table-cell w-28 min-w-28'
 const OWNED_COLUMN = 'hidden sm:table-cell w-56 min-w-56'
 /**
  * Gameweek columns are sized to the number on show, matching the Fixtures
@@ -110,6 +115,23 @@ export function ClubBlocksTable({
             >
               {/* Section 6.4: labelled Fixture Score, never FDR. */}
               Fixture Score
+            </SortableHeader>
+            {/* Immediately right of Fixture Score, on the same 0 to 10 scale
+                and the same bands, so the two read as a pair: how good the run
+                is, and how good the club is. */}
+            <SortableHeader
+              href={sortHref('strength')}
+              active={active.field === 'strength'}
+              descending={active.descending}
+              className={`text-right ${STRENGTH_COLUMN}`}
+              title="How strong this club is right now, on the same 0 to 10 scale as Fixture Score. Always this app's figure — FPL publishes no form-aware strength, so this column does not change with the difficulty toggle"
+            >
+              Team Strength
+              {/* Named so it is not read as an FPL figure while the toggle
+                  says FPL. */}
+              <span className="ml-1 font-normal text-neutral-400 dark:text-neutral-500">
+                (ours)
+              </span>
             </SortableHeader>
 
             <SortableHeader
@@ -192,6 +214,7 @@ function ClubRow({
             what surfaces the three-per-club limit. */}
         <span className="mt-0.5 flex items-center gap-1.5 sm:hidden">
           <ScoreBadge summary={block.score} compact />
+          <StrengthBadge value={block.teamStrength} compact />
           {owned > 0 && <OwnedBadge count={owned} atLimit={atLimit} />}
         </span>
       </th>
@@ -200,6 +223,11 @@ function ClubRow({
         className={`border-b border-neutral-100 px-2 py-1.5 text-right dark:border-neutral-800/70 ${rowBackground} ${SCORE_COLUMN}`}
       >
         <ScoreBadge summary={block.score} />
+      </td>
+      <td
+        className={`border-b border-neutral-100 px-2 py-1.5 text-right dark:border-neutral-800/70 ${rowBackground} ${STRENGTH_COLUMN}`}
+      >
+        <StrengthBadge value={block.teamStrength} />
       </td>
 
       <td
@@ -261,6 +289,32 @@ function OwnedCell({
   )
 }
 
+/**
+ * Team Strength on the same 0 to 10 scale and the same colour bands as the
+ * Fixture Score beside it, so the pair reads as one thought: an easy run
+ * against a weak side is a different proposition from an easy run against a
+ * strong one.
+ */
+function StrengthBadge({
+  value,
+  compact = false,
+}: {
+  value: number
+  compact?: boolean
+}) {
+  return (
+    <span
+      title={`Team Strength ${value.toFixed(1)} of 10`}
+      className={`inline-flex items-baseline rounded px-1.5 py-0.5 tabular-nums ${
+        compact ? 'text-[11px]' : 'text-sm'
+      } ${scoreTone(value)}`}
+    >
+      <span className="font-semibold">{value.toFixed(1)}</span>
+      <span className="sr-only"> team strength out of 10</span>
+    </span>
+  )
+}
+
 /** The count on its own, for the narrow layout where names do not fit. */
 function OwnedBadge({ count, atLimit }: { count: number; atLimit: boolean }) {
   return (
@@ -295,6 +349,7 @@ function SortableHeader({
   descending,
   align = 'left',
   className,
+  title,
   children,
 }: {
   href: string
@@ -302,11 +357,13 @@ function SortableHeader({
   descending: boolean
   align?: 'left' | 'right'
   className: string
+  title?: string
   children: React.ReactNode
 }) {
   return (
     <th
       scope="col"
+      title={title}
       aria-sort={active ? (descending ? 'descending' : 'ascending') : 'none'}
       className={`border-b border-neutral-200 bg-neutral-50 p-0 font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${className}`}
     >

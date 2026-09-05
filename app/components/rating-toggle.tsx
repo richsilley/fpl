@@ -53,11 +53,18 @@ export function RatingToggle({
           FPL
         </Option>
         <Option
-          href={href('custom')}
-          selected={rating === 'custom'}
-          title="Derived from results so far: recent points per game, shrunk towards FPL's pre-season strength, with a league-wide home advantage"
+          href={href('form')}
+          selected={rating === 'form'}
+          title="Derived from results: recent goal difference and points, shrunk towards a prior, with a league-wide home advantage"
         >
-          Form-based
+          Form
+        </Option>
+        <Option
+          href={href('blend')}
+          selected={rating === 'blend'}
+          title="Form, offset by the club's own strength: how hard the fixture is for them. Changes cell colours only — the Fixture Score is the same as Form"
+        >
+          Blend
         </Option>
       </span>
     </div>

@@ -439,6 +439,7 @@ async function MatrixSection({
               startGameweek: data.startGameweek,
               horizon: data.horizon,
               sort,
+              teamStrength: data.teamStrength,
             })}
             managerId={managerId}
             horizon={data.horizon}

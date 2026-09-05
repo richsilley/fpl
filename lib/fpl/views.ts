@@ -43,6 +43,13 @@ export type MatrixData = {
   totalPlayers: number
   /** Which difficulty rating the index was built with (section 6.7). */
   rating: RatingSource
+  /**
+   * Team Strength per club, 0 to 10 (section 6.7).
+   *
+   * Always this app's figure, in every mode including `fpl`, because FPL
+   * publishes nothing form-aware to put in the column.
+   */
+  teamStrength: Map<number, number>
 }
 
 export async function loadMatrixData(
@@ -60,17 +67,17 @@ export async function loadMatrixData(
   ])
 
   const startGameweek = firstUpcomingGameweek(bootstrap.events)
+  // Built once and shared, so Fixtures and Club Blocks cannot disagree about a
+  // club, and so the twenty club strengths are computed once per request.
+  const fixtureRating = buildRating(rating, fixtures, bootstrap.teams)
 
   return {
     squad,
     // One index, built once with one rating, and both horizon views read it.
     // That is what stops Fixtures and Club Blocks disagreeing (section 6.7).
-    fixtures: buildFixtureIndex(
-      fixtures,
-      bootstrap.teams,
-      buildRating(rating, fixtures, bootstrap.teams)
-    ),
+    fixtures: buildFixtureIndex(fixtures, bootstrap.teams, fixtureRating),
     rating,
+    teamStrength: fixtureRating.teamStrength,
     teams: bootstrap.teams,
     startGameweek,
     columns: gameweekColumns(startGameweek),

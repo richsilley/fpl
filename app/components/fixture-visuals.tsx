@@ -109,14 +109,36 @@ export function FixtureCell({ fixtures }: { fixtures: TeamFixture[] }) {
       {fixtures.map((fixture, position) => (
         <div
           key={`${fixture.opponent}-${position}`}
-          className={`flex flex-1 items-center justify-center gap-0.5 leading-none ${
+          className={`group flex flex-1 cursor-default items-center justify-center gap-0.5 leading-none outline-none ${
             split ? 'text-[10px]' : 'text-xs'
           } ${fdrTone(fixture.fdr)}`}
           title={`${fixture.isHome ? 'Home to' : 'Away at'} ${fixture.opponentName} (difficulty ${formatDifficulty(fixture.fdr)})`}
+          // Focusable by click and tap but skipped by the keyboard. A cell is
+          // not a control, and a full fixture list is 540 of them; putting
+          // every one in the tab order would wreck keyboard navigation of the
+          // table for the sake of a number the `title` and screen-reader text
+          // already give.
+          tabIndex={-1}
         >
-          <span className="font-medium">{fixture.opponent}</span>
-          <span className="text-[9px] uppercase opacity-70">
+          {/* The number is never printed in the cell. Opponent and venue are
+              already two pieces of information, and a third is unreadable
+              across 36 columns at 380px. It appears on hover, and on tap,
+              which is what the focus state is for. */}
+          <span className="font-medium group-hover:hidden group-focus:hidden">
+            {fixture.opponent}
+          </span>
+          <span className="text-[9px] uppercase opacity-70 group-hover:hidden group-focus:hidden">
             {fixture.isHome ? 'H' : 'A'}
+          </span>
+          <span
+            aria-hidden
+            className="hidden font-semibold tabular-nums group-hover:inline group-focus:inline"
+          >
+            {formatDifficulty(fixture.fdr)}
+          </span>
+          <span className="sr-only">
+            {fixture.isHome ? 'Home to' : 'Away at'} {fixture.opponentName},
+            difficulty {formatDifficulty(fixture.fdr)}
           </span>
         </div>
       ))}

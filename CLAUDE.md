@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.16; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.17; v1 feature complete).
 
 ## What this is
 
@@ -223,7 +223,7 @@ load-bearing:
 | `params.ts` | URL state, `buildHref`, `carriedFields`, `CarriedState` |
 | `ownership.ts` | bands, direction flag, strategy ordering of the bands |
 | `defcon.ts` | DefCon thresholds + bar ratio (§7.3) |
-| `difficulty.ts` | the two fixture difficulty ratings (§6.7) |
+| `difficulty.ts` | the three difficulty modes + Team Strength (§6.7) |
 | `scratch.ts` | the scratch-squad diff, budget and warnings (§7.7) |
 | `availability.ts` | status-code mapping |
 | `lib/format.ts` | price, rank, points |
@@ -406,37 +406,64 @@ Pure horizon/score arithmetic lives in `lib/fpl/horizon.ts`, deliberately
 a server-only module from one fails the build. `lib/fpl/fixtures.ts` re-exports
 it for server callers.
 
-## Two difficulty ratings (§6.7)
+## Three difficulty modes (§6.7)
 
-`?rating=fpl` (default) uses FPL's own pre-season FDR. `?rating=custom`
-derives one from results in `fixtures/` — **no new endpoints, no new projection
-fields**. `lib/fpl/difficulty.ts`:
+`?rating=fpl` (default) | `form` | `blend`. Anything else falls back to `fpl`,
+including the retired `custom`. Derived from `fixtures/` — **no new endpoints,
+no new projection fields**. `lib/fpl/difficulty.ts`.
+
+| mode | matrix colour | Fixture Score | Team Strength |
+|---|---|---|---|
+| `fpl` | FPL integers | FPL FDR | ours |
+| `form` | plain | plain | ours |
+| `blend` | blended | **plain** | ours |
+
+**Fixture Score NEVER blends, in any mode.** Blend mode is identical to form
+mode for the score; it changes cell colours only. If it blended, it and the
+Team Strength column beside it would both carry team quality and the row would
+count it twice. This is why a rating is a **pair** — `{ colour, score }` — so
+the split is structural and cannot be lost by reading the wrong field.
+**Team Strength is always ours, even in `fpl` mode**, since FPL publishes
+nothing form-aware; the column is labelled *(ours)* for that reason.
+
+**Two-stage shrinkage**, all constants named at the top of the file, never
+inlined:
 
 ```
-observed = PPG over the last 6 completed matches
-prior    = strength_overall_home/away, averaged, mapped onto the PPG scale
-weight   = played / (played + 6)
-strength = weight x observed + (1 - weight) x prior
+observed = GD_BLEND(leagueMeanPPG + GD_TO_PPG x GDpg) + (1-GD_BLEND)PPG
+prior    = season PPG if played >= SEASON_PRIOR_MIN, else FPL strength mapped
+w        = n / (n + PRIOR_WEIGHT)          <- n is WINDOW matches, caps at 6
+strength = w x observed + (1-w) x prior
+
+HA_ppg   = wHA x observed + (1-wHA) x HOME_ADVANTAGE_PRIOR
 ```
 
-then linear across the 20 clubs onto 1–5, a league-wide home-advantage offset
-split ±half, clamped to 1–5.
+- **`w` uses window matches, not matches played.** It caps at 0.375 from GW6
+  and stays there to GW38. Dividing by matches played climbed to 0.86 — more
+  confidence in the same six matches in May than in October. Do not change
+  this back.
+- **The prior switches to season form at 8 matches.** FPL's strengths never
+  update, so anchoring to them in April anchors to a July guess.
+- **Home advantage is league-wide and shrunk.** Never split a club's record by
+  venue. Raw was 0.600 ppg at 20 matches, ~2x historical; shrunk to 0.397.
 
-- **`teams.played`/`points`/`position` are never populated by FPL** (nor is
-  `strength`). Count results from the fixtures.
-  `strength_overall_home`/`_away` *are* populated — they're the prior.
-- **Early season it's mostly prior, by design** — at 2 games `weight` is 0.25.
-  Two results aren't evidence. **The 6-match window is what lets a rating fall
-  when form does**; a whole-season `observed` would converge and freeze, which
-  is the static FDR's exact failing.
-- `weight` counts *all* games while `observed` reads the last 6. Not a bug:
-  confidence grows with the season, the estimate tracks current form.
-- **Injected into `buildFixtureIndex`, so it lands in `TeamFixture.fdr`** and
-  everything downstream is untouched — Fixture Score, colour bands and Club
-  Blocks needed no changes. One index per request means Fixtures and Club
-  Blocks can never disagree.
-- Only adjustment: `fdrTone()` rounds to a band, since a fractional FDR matched
-  no integer key and fell through to neutral. The five bands are unchanged.
+**Blend mode's row behaviour is expected, not a bug.** Exactly:
+
+```
+blendFDR - plainFDR = -(ALPHA/(1+ALPHA)) x ((oppFDR-3) + (ownFDR-3))
+```
+
+(verified against the implementation to 6e-16). So: blending **cannot reorder
+a row** — the position of the row moves, the ordering inside it does not. A
+club far from average moves as a block (Arsenal/Man City all 34 cells down,
+Coventry all up). **A mid-table club shows cells moving both ways**, because
+at `ownFDR ≈ 3` the own term vanishes and only the `1/(1+ALPHA)` compression
+remains. That is the formula working; do not "fix" it.
+
+**Cells never print a number**, in any mode — opponent and venue only. A third
+figure is unreadable across 36 columns at 380px. The value is behind hover and
+tap; the chip is `tabindex="-1"` so a pointer can focus it but the keyboard
+skips all 540.
 
 **Do not call this FDR** — users expect low FDR = good, and this inverts that.
 Label it **Fixture Score**. Colour rule is constant: green = good everywhere.

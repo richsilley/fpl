@@ -1,7 +1,7 @@
 import type { FplFixture, FplTeam } from './types'
 
 /**
- * Fixture difficulty: FPL's own rating, or one derived from results so far.
+ * Fixture difficulty: FPL's own rating, or one derived from results (§6.7).
  *
  * Not `server-only`: pure arithmetic over data the caller already fetched.
  *
@@ -9,209 +9,383 @@ import type { FplFixture, FplTeam } from './types'
  *
  * FPL's FDR is set before a ball is kicked and never moves. A promoted side
  * that turns out to be decent keeps its easy rating all season, and a big club
- * in freefall keeps its hard one. The custom rating is the same idea measured
- * from what has actually happened.
+ * in freefall keeps its hard one.
  *
- * ## Where the numbers come from
+ * ## Three modes
  *
- * Everything is derived from `fixtures/`, which every view already loads:
- * `team_h_score`, `team_a_score` and `finished` are enough to reconstruct the
- * table and recent form. **The `teams` array's own `played`, `points` and
- * `position` fields are not populated by FPL** — they are zeroes all season —
- * so they are ignored, and the results are counted here instead.
+ * | Mode    | Matrix colour | Fixture Score | Team Strength |
+ * |---------|---------------|---------------|---------------|
+ * | `fpl`   | FPL integers  | FPL FDR       | ours          |
+ * | `form`  | plain         | plain         | ours          |
+ * | `blend` | blended       | **plain**     | ours          |
  *
- * ## The model
+ * **Fixture Score never uses the blend, in any mode.** In blend mode it is
+ * identical to form mode. If it blended, it and the Team Strength column
+ * beside it would both carry team quality and the view would be counting the
+ * same thing twice. Blend mode changes matrix colours and nothing else.
  *
- * For each club:
+ * That is why a rating is a *pair* of functions rather than one: making the
+ * separation structural means it cannot be lost by someone reading `fdr` where
+ * they meant the score.
  *
- * ```
- * observed = points per game over their last 6 completed matches
- * prior    = FPL's overall strength, mapped onto the same points-per-game scale
- * weight   = played / (played + 6)
- * strength = weight x observed + (1 - weight) x prior
- * ```
+ * Team Strength is always this app's calculation, in every mode including
+ * `fpl`, because FPL publishes nothing form-aware to put there.
  *
- * **Early in the season the rating is mostly the prior, by design.** After two
- * matches `weight` is 0.25, so three quarters of a club's rating is still
- * FPL's pre-season opinion. That is the intended behaviour, not a warm-up
- * period to be skipped: two results are not evidence, and a rating that swung
- * wildly on them would be worse than the static one it replaces. Confidence in
- * the observed record grows as the season does, reaching two thirds by GW12
- * and six sevenths by GW38.
+ * ## Everything comes from `fixtures/`
  *
- * **The six-match window is what lets a rating fall when form does.** `weight`
- * only ever rises, so if `observed` were the whole season a club's rating
- * would converge and then freeze, which is the very problem with the static
- * FDR. Reading form over a rolling window instead means a good side on a bad
- * run gets easier to play, and the rating keeps saying something current right
- * up to GW38.
- *
- * Home advantage is measured once across the whole league rather than by
- * splitting each club's record in two. Half a season gives a club nine or ten
- * home games, which is far too few to separate a real home effect from noise,
- * while the league-wide figure has hundreds of matches behind it.
+ * `team_h_score`, `team_a_score` and `finished` reconstruct both the table and
+ * recent form. **The `teams` array's own `played`, `points` and `position` are
+ * never populated by FPL** — they sit at zero all season — so results are
+ * counted here instead. `strength` is likewise null; `strength_overall_home`
+ * and `strength_overall_away` are populated, and are the pre-season prior.
  */
 
-/** How many recent matches the observed form is read over. */
+// ---------------------------------------------------------------------------
+// Constants
+//
+// Every tunable number in the model, named and gathered, because these are
+// what will be revisited once a few gameweeks have been watched. None of them
+// is inlined anywhere below.
+// ---------------------------------------------------------------------------
+
+/**
+ * How much a club's own strength counts against its opponent's when blending.
+ *
+ * 0.5 means an opponent's quality matters twice as much as your own, which is
+ * the right order: who you play swings a fixture more than who you are.
+ */
+const ALPHA = 0.5
+
+/**
+ * Shrinkage constant for club strength, in matches.
+ *
+ * The observed form only reaches parity with the prior at `PRIOR_WEIGHT`
+ * matches, and the window caps at six, so the prior always keeps the larger
+ * share. That is deliberate: six matches is a real signal but not a big one.
+ */
+const PRIOR_WEIGHT = 10
+
+/** Historical Premier League home advantage, in points per game. */
+const HOME_ADVANTAGE_PRIOR = 0.33
+
+/**
+ * Shrinkage constant for home advantage, in matches.
+ *
+ * Much larger than `PRIOR_WEIGHT` because the historical figure is genuinely
+ * well established, while a season's own home-advantage number is noisy for a
+ * long time: 20 matches in it read 0.60, roughly double the long-run value.
+ */
+const HA_PRIOR_WEIGHT = 60
+
+/** How many recent matches the observed form reads. */
 const FORM_WINDOW = 6
 
 /**
- * The points-per-game spread the prior is stretched across, centred on the
- * league's actual mean.
+ * Weight on goal difference against points, within the window.
  *
- * The one tuned constant here. A Premier League season usually runs from about
- * 0.6 points per game at the bottom to about 2.4 at the top, so a spread of
- * 1.8 puts FPL's weakest and strongest clubs at roughly those ends. Only the
- * spread is a constant: the centre is measured, so the prior cannot drift away
- * from the scale the observed record is on.
+ * Points per game over six matches has few possible values and throws away the
+ * margin. Two clubs on three points after two matches are not the same club if
+ * one scored seven and conceded four and the other four and eight.
+ */
+const GD_BLEND = 0.6
+
+/** Converts goal difference per game onto the points-per-game scale. */
+const GD_TO_PPG = 0.55
+
+/**
+ * Matches a club must have played before its prior becomes its own
+ * season-to-date form rather than FPL's pre-season strength.
+ */
+const SEASON_PRIOR_MIN = 8
+
+/**
+ * The points-per-game spread FPL's pre-season strength is stretched across,
+ * centred on the league's measured mean.
+ *
+ * A Premier League season usually runs from about 0.6 points per game at the
+ * bottom to about 2.4 at the top, so 1.8 puts the weakest and strongest clubs
+ * at roughly those ends.
  */
 const PRIOR_SPREAD = 1.8
 
-/**
- * Fallback mean before any match has been played, when there is nothing to
- * measure. The long-run Premier League average, slightly under 1.5 because
- * draws put two points into a match rather than three.
- */
+/** Fallback mean before any match has been played. */
 const DEFAULT_MEAN_PPG = 1.4
 
 /** FDR runs 1 to 5, and the colour bands in `fixture-visuals` assume it. */
 const MIN_FDR = 1
 const MAX_FDR = 5
+/** The middle of that scale: an average opponent, and the blend's pivot. */
+const NEUTRAL_FDR = 3
 
-export type RatingSource = 'fpl' | 'custom'
+/** Team Strength is published on the same 0 to 10 scale as Fixture Score. */
+const MAX_TEAM_STRENGTH = 10
+
+export type RatingSource = 'fpl' | 'form' | 'blend'
+
+/** The difficulty one club faces in one fixture. */
+export type RatingFn = (fixture: FplFixture, forHome: boolean) => number
 
 /**
- * The difficulty a club faces in one fixture.
+ * A mode, as the fixture index consumes it.
  *
- * `forHome` picks which side of the fixture is being asked about, matching
- * `team_h_difficulty` / `team_a_difficulty`. Both ratings are this shape, so
- * the fixture index does not know which one it was handed.
+ * Two functions, not one, so that "Fixture Score never blends" is enforced by
+ * the shape rather than by everyone remembering it.
  */
-export type Rating = (fixture: FplFixture, forHome: boolean) => number
+export type FixtureRating = {
+  /** Difficulty for the matrix cell's colour and its hover readout. */
+  colour: RatingFn
+  /** Difficulty the Fixture Score sums. Never the blend. */
+  score: RatingFn
+  /** Team Strength per club on a 0 to 10 scale. Always this app's figure. */
+  teamStrength: Map<number, number>
+}
 
-/** What the custom rating worked out about one club, for the legend. */
+/** What the model worked out about one club, for the legend and for testing. */
 export type ClubStrength = {
   teamId: number
   shortName: string
   /** Completed matches this season. */
   played: number
-  /** Points per game over the last `FORM_WINDOW` matches. */
+  /** Matches in the form window, capped at `FORM_WINDOW`. */
+  windowMatches: number
+  /** Goal difference per match, within the window. */
+  goalDifferencePerGame: number
+  /** Points per match, within the window. */
+  pointsPerGame: number
+  /** The goal-difference-and-points blend, in points per game. */
   observed: number
-  /** FPL's pre-season strength on the points-per-game scale. */
+  /** Pre-season strength, or season-to-date form once there is enough. */
   prior: number
-  /** How much of the rating is `observed` rather than `prior`, 0 to 1. */
+  /** Which of those the prior is. */
+  priorSource: 'fpl-strength' | 'season-form'
+  /** How much of the rating is `observed`, 0 to 1. Caps with the window. */
   weight: number
   /** The blend, in points per game. */
   strength: number
   /** That strength on the 1 to 5 scale, before any venue adjustment. */
   difficulty: number
+  /** That strength on the 0 to 10 scale. */
+  teamStrength: number
 }
 
-export type CustomRating = {
-  rate: Rating
+export type DerivedRating = {
   clubs: ClubStrength[]
-  /** Points-per-game gap between home and away sides, league wide. */
-  homeAdvantage: number
+  /** Home advantage after shrinkage, in points per game. */
+  homeAdvantagePpg: number
+  /** The same on the 1 to 5 difficulty scale, before halving. */
+  homeAdvantageFdr: number
   /** Completed matches the rating is built from. */
   matchesUsed: number
+  leagueMeanPpg: number
 }
 
 /** FPL's own pre-season figures, straight off the fixture. */
-export const fplRating: Rating = (fixture, forHome) =>
+export const fplRating: RatingFn = (fixture, forHome) =>
   forHome ? fixture.team_h_difficulty : fixture.team_a_difficulty
 
 export function buildRating(
   source: RatingSource,
   fixtures: FplFixture[],
   teams: FplTeam[]
-): Rating {
-  return source === 'custom' ? customRating(fixtures, teams).rate : fplRating
+): FixtureRating {
+  const derived = deriveRating(fixtures, teams)
+  const teamStrength = new Map(
+    derived.clubs.map((club) => [club.teamId, club.teamStrength])
+  )
+
+  const plain = venueAdjusted(derived, 'plain')
+  const blended = venueAdjusted(derived, 'blend')
+
+  if (source === 'fpl') {
+    return { colour: fplRating, score: fplRating, teamStrength }
+  }
+  if (source === 'blend') {
+    // The one asymmetric case, and the reason this type has two fields.
+    return { colour: blended, score: plain, teamStrength }
+  }
+  return { colour: plain, score: plain, teamStrength }
 }
 
-export function customRating(
+/**
+ * Stage 3: a club's difficulty for one fixture, with venue applied.
+ *
+ * The blend re-centres on `NEUTRAL_FDR` so an average fixture stays average:
+ * both terms are distances from the middle, and dividing by `1 + ALPHA` keeps
+ * the result on the same scale rather than compressing it toward 3.
+ */
+function venueAdjusted(
+  derived: DerivedRating,
+  kind: 'plain' | 'blend'
+): RatingFn {
+  const difficulty = new Map(
+    derived.clubs.map((club) => [club.teamId, club.difficulty])
+  )
+  const half = derived.homeAdvantageFdr / 2
+
+  return (fixture, forHome) => {
+    const opponentId = forHome ? fixture.team_a : fixture.team_h
+    const ownId = forHome ? fixture.team_h : fixture.team_a
+
+    const oppFdr = difficulty.get(opponentId)
+    const ownFdr = difficulty.get(ownId)
+    if (oppFdr === undefined || ownFdr === undefined) {
+      return NEUTRAL_FDR
+    }
+
+    const base =
+      kind === 'plain'
+        ? oppFdr
+        : NEUTRAL_FDR +
+          (oppFdr - NEUTRAL_FDR - ALPHA * (ownFdr - NEUTRAL_FDR)) / (1 + ALPHA)
+
+    // Playing the away side is easier by as much as playing the home side is
+    // harder, so the league's mean difficulty is unchanged.
+    const adjusted = base + (forHome ? -half : half)
+
+    // Clamped because FDR is defined on 1 to 5 and the colour bands read it as
+    // such. The cost is that the strongest club reads 5 whether at home or
+    // away; widening the scale to fit the offset instead would mean no club
+    // ever reached either end of it.
+    return Math.min(MAX_FDR, Math.max(MIN_FDR, adjusted))
+  }
+}
+
+/** Stages 1 and 2, computed once per request for all twenty clubs. */
+export function deriveRating(
   fixtures: FplFixture[],
   teams: FplTeam[]
-): CustomRating {
+): DerivedRating {
   const played = completedFixtures(fixtures)
-  const homeAdvantage = leagueHomeAdvantage(played)
-  const meanPpg = leagueMeanPpg(played)
+  const leagueMeanPpg = leagueMeanPpgOf(played)
+  const results = resultsByClub(played, teams)
+  const fplPriors = fplStrengthAsPpg(teams, leagueMeanPpg)
 
-  const points = pointsByClub(played, teams)
-  const priors = priorPpg(teams, meanPpg)
+  const partial = teams.map((team) => {
+    const record = results.get(team.id) ?? []
+    const window = record.slice(-FORM_WINDOW)
+    const windowMatches = window.length
 
-  const clubs: Omit<ClubStrength, 'difficulty'>[] = teams.map((team) => {
-    const record = points.get(team.id) ?? []
-    const recent = record.slice(-FORM_WINDOW)
+    const goalDifferencePerGame =
+      windowMatches === 0
+        ? 0
+        : window.reduce((total, match) => total + match.goalDifference, 0) /
+          windowMatches
+    const pointsPerGame =
+      windowMatches === 0
+        ? leagueMeanPpg
+        : window.reduce((total, match) => total + match.points, 0) /
+          windowMatches
+
+    // Goal difference recentred on the league mean so it lands on the same
+    // points-per-game scale the other half of the blend is already on.
     const observed =
-      recent.length === 0
-        ? meanPpg
-        : recent.reduce((total, p) => total + p, 0) / recent.length
+      GD_BLEND * (leagueMeanPpg + GD_TO_PPG * goalDifferencePerGame) +
+      (1 - GD_BLEND) * pointsPerGame
 
-    // Confidence grows with the whole season's evidence even though the
-    // estimate itself only reads the recent window. Played, not the window
-    // length: capping this at six would freeze the prior at half the rating
-    // for the rest of the season.
-    const weight = record.length / (record.length + FORM_WINDOW)
-    const prior = priors.get(team.id) ?? meanPpg
+    // Once a club has a season of its own, that is a better anchor than a
+    // pre-season guess that will never update again.
+    const seasonForm =
+      record.length === 0
+        ? leagueMeanPpg
+        : record.reduce((total, match) => total + match.points, 0) /
+          record.length
+    const useSeasonPrior = record.length >= SEASON_PRIOR_MIN
+    const prior = useSeasonPrior
+      ? seasonForm
+      : (fplPriors.get(team.id) ?? leagueMeanPpg)
+
+    // Matches *in the window*, which caps at `FORM_WINDOW`, so the weight caps
+    // too. Counting every match played instead would keep raising confidence
+    // in evidence that stopped growing at GW7 — trusting the same six matches
+    // more in May than in October.
+    const weight = windowMatches / (windowMatches + PRIOR_WEIGHT)
 
     return {
       teamId: team.id,
       shortName: team.short_name,
       played: record.length,
+      windowMatches,
+      goalDifferencePerGame,
+      pointsPerGame,
       observed,
       prior,
+      priorSource: (useSeasonPrior ? 'season-form' : 'fpl-strength') as
+        'season-form' | 'fpl-strength',
       weight,
       strength: weight * observed + (1 - weight) * prior,
     }
   })
 
-  // Linear across the twenty clubs, so the scale always spans 1 to 5 whatever
-  // the spread of strengths happens to be. Not inverted: a strong opponent is
-  // a *high* number, which is FPL's convention and what `6 - fdr` expects.
-  const strengths = clubs.map((club) => club.strength)
+  const strengths = partial.map((club) => club.strength)
   const lowest = Math.min(...strengths)
   const highest = Math.max(...strengths)
   const span = highest - lowest
 
-  const toDifficulty = (strength: number): number =>
-    span === 0
-      ? (MIN_FDR + MAX_FDR) / 2
-      : MIN_FDR + ((strength - lowest) / span) * (MAX_FDR - MIN_FDR)
-
-  const rated: ClubStrength[] = clubs.map((club) => ({
+  const clubs: ClubStrength[] = partial.map((club) => ({
     ...club,
-    difficulty: toDifficulty(club.strength),
+    // Linear across the twenty clubs, so the scale always spans 1 to 5. Not
+    // inverted: a strong opponent is a *high* number, FPL's convention and
+    // what `6 - fdr` expects.
+    difficulty:
+      span === 0
+        ? (MIN_FDR + MAX_FDR) / 2
+        : MIN_FDR + ((club.strength - lowest) / span) * (MAX_FDR - MIN_FDR),
+    teamStrength:
+      span === 0
+        ? MAX_TEAM_STRENGTH / 2
+        : ((club.strength - lowest) / span) * MAX_TEAM_STRENGTH,
   }))
 
-  const difficultyById = new Map(
-    rated.map((club) => [club.teamId, club.difficulty])
-  )
+  const homeAdvantagePpg = homeAdvantage(played)
 
-  // Home advantage as a constant offset on the finished 1-to-5 scale, split
-  // evenly so the league's average difficulty is unchanged: playing the away
-  // side is easier by as much as playing the home side is harder.
-  const venueOffset =
-    span === 0 ? 0 : (homeAdvantage / 2 / span) * (MAX_FDR - MIN_FDR)
+  return {
+    clubs,
+    homeAdvantagePpg,
+    // Onto the difficulty scale: a points-per-game gap is worth the same
+    // fraction of the 1-to-5 range as it is of the strength range.
+    homeAdvantageFdr:
+      span === 0 ? 0 : (homeAdvantagePpg / span) * (MAX_FDR - MIN_FDR),
+    matchesUsed: played.length,
+    leagueMeanPpg,
+  }
+}
 
-  const rate: Rating = (fixture, forHome) => {
-    // The difficulty a club faces is the *opponent's* strength, adjusted for
-    // where the opponent is playing. When this row is the home side, the
-    // opponent is away and therefore weaker.
-    const opponentId = forHome ? fixture.team_a : fixture.team_h
-    const base = difficultyById.get(opponentId)
-    if (base === undefined) {
-      return (MIN_FDR + MAX_FDR) / 2
-    }
-    const adjusted = base + (forHome ? -venueOffset : venueOffset)
-    // Clamped because FDR is defined on 1 to 5 and the colour bands read it as
-    // such. The cost is that the strongest club reads 5 whether at home or
-    // away; the alternative, widening the scale to fit the offset, would mean
-    // no club ever reached either end.
-    return Math.min(MAX_FDR, Math.max(MIN_FDR, adjusted))
+/**
+ * Stage 2: one home advantage for the division, shrunk toward the historical
+ * figure.
+ *
+ * League-wide rather than per club: half a season gives a club nine or ten
+ * home games, far too few to separate a real home effect from noise, and
+ * splitting each record by venue halves the sample for no gain.
+ *
+ * Shrunk for the same reason club strength is. A season's first twenty matches
+ * produced 0.60 points per game, roughly double the long-run value, and a
+ * rating that took that at face value would overstate every home fixture.
+ */
+function homeAdvantage(played: FplFixture[]): number {
+  if (played.length === 0) {
+    return HOME_ADVANTAGE_PRIOR
   }
 
-  return { rate, clubs: rated, homeAdvantage, matchesUsed: played.length }
+  let home = 0
+  let away = 0
+  for (const fixture of played) {
+    const h = fixture.team_h_score as number
+    const a = fixture.team_a_score as number
+    if (h > a) home += 3
+    else if (a > h) away += 3
+    else {
+      home += 1
+      away += 1
+    }
+  }
+
+  const observed = (home - away) / played.length
+  const weight = played.length / (played.length + HA_PRIOR_WEIGHT)
+  return weight * observed + (1 - weight) * HOME_ADVANTAGE_PRIOR
 }
+
+type MatchResult = { points: number; goalDifference: number }
 
 /**
  * Fixtures with a result. `finished` alone is not enough: a fixture can be
@@ -228,18 +402,19 @@ function completedFixtures(fixtures: FplFixture[]): FplFixture[] {
 }
 
 /**
- * Points each club has taken, oldest first, so the last six are the recent
- * ones.
+ * Each club's results, oldest first, so the last six are the recent ones.
  *
- * Ordered by gameweek rather than by the order the API happens to return, and
- * a rearranged fixture therefore counts as recent according to when it was
- * played rather than when it was originally scheduled.
+ * Ordered by gameweek rather than by the order the API happens to return, so a
+ * rearranged fixture counts as recent according to when it was played rather
+ * than when it was originally scheduled.
  */
-function pointsByClub(
+function resultsByClub(
   played: FplFixture[],
   teams: FplTeam[]
-): Map<number, number[]> {
-  const byClub = new Map<number, number[]>(teams.map((team) => [team.id, []]))
+): Map<number, MatchResult[]> {
+  const byClub = new Map<number, MatchResult[]>(
+    teams.map((team) => [team.id, []])
+  )
 
   const inOrder = [...played].sort(
     (a, b) => (a.event ?? 0) - (b.event ?? 0) || a.id - b.id
@@ -251,62 +426,36 @@ function pointsByClub(
     const drawn = home === away
     const homePoints = drawn ? 1 : home > away ? 3 : 0
 
-    byClub.get(fixture.team_h)?.push(homePoints)
-    byClub.get(fixture.team_a)?.push(drawn ? 1 : 3 - homePoints)
+    byClub
+      .get(fixture.team_h)
+      ?.push({ points: homePoints, goalDifference: home - away })
+    byClub.get(fixture.team_a)?.push({
+      points: drawn ? 1 : 3 - homePoints,
+      goalDifference: away - home,
+    })
   }
 
   return byClub
 }
 
 /**
- * The league-wide home advantage, in points per game.
- *
- * Total points taken by home sides minus total taken by away sides, over the
- * same set of matches. One figure for the division, per the reasoning in the
- * module note.
- */
-function leagueHomeAdvantage(played: FplFixture[]): number {
-  if (played.length === 0) {
-    return 0
-  }
-
-  let home = 0
-  let away = 0
-  for (const fixture of played) {
-    const h = fixture.team_h_score as number
-    const a = fixture.team_a_score as number
-    if (h > a) home += 3
-    else if (a > h) away += 3
-    else {
-      home += 1
-      away += 1
-    }
-  }
-
-  return (home - away) / played.length
-}
-
-/**
  * Mean points per game across every club.
  *
  * Not a constant: the draw rate decides it, since a draw puts two points into
- * a match and a win three. Measuring it keeps the prior on the same scale as
- * the observed record however the season is going.
+ * a match and a win three. Measuring it keeps the prior and the
+ * goal-difference term on the same scale as the observed record.
  */
-function leagueMeanPpg(played: FplFixture[]): number {
+function leagueMeanPpgOf(played: FplFixture[]): number {
   if (played.length === 0) {
     return DEFAULT_MEAN_PPG
   }
 
   let total = 0
   for (const fixture of played) {
-    const h = fixture.team_h_score as number
-    const a = fixture.team_a_score as number
-    total += h === a ? 2 : 3
+    total += fixture.team_h_score === fixture.team_a_score ? 2 : 3
   }
 
-  // Two clubs take part in each match, so the per-club appearance count is
-  // twice the number of matches.
+  // Two clubs take part in each match, so team-matches is twice the fixtures.
   return total / (played.length * 2)
 }
 
@@ -317,11 +466,13 @@ function leagueMeanPpg(played: FplFixture[]): number {
  * venue-neutral figure, because home advantage is applied separately as a
  * league-wide offset and taking it from both places would count it twice.
  *
- * The pair is normalised across the twenty clubs rather than read as an
- * absolute, since FPL's scale is a small integer range whose meaning is
- * relative anyway.
+ * Normalised across the twenty clubs rather than read as an absolute, since
+ * FPL's scale is a small integer range whose meaning is relative anyway.
  */
-function priorPpg(teams: FplTeam[], meanPpg: number): Map<number, number> {
+function fplStrengthAsPpg(
+  teams: FplTeam[],
+  meanPpg: number
+): Map<number, number> {
   const overall = new Map(
     teams.map((team) => [
       team.id,
@@ -339,7 +490,6 @@ function priorPpg(teams: FplTeam[], meanPpg: number): Map<number, number> {
       if (span === 0) {
         return [teamId, meanPpg]
       }
-      // -0.5 to +0.5 around the measured mean, stretched by the spread.
       const position = (strength - lowest) / span - 0.5
       return [teamId, meanPpg + position * PRIOR_SPREAD]
     })

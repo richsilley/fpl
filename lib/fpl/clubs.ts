@@ -36,6 +36,14 @@ export type ClubBlock = {
   fixtures: TeamFixture[][]
   /** Squad players from this club. At most three can be held (section 7.5). */
   owned: SquadPlayer[]
+  /**
+   * Team Strength, 0 to 10 (section 6.7).
+   *
+   * Always this app's figure, in every rating mode including `fpl`, because
+   * FPL publishes nothing form-aware. The column is labelled so it is not
+   * mistaken for an FPL number when the toggle reads FPL.
+   */
+  teamStrength: number
 }
 
 /**
@@ -53,6 +61,7 @@ export function buildClubBlocks({
   startGameweek,
   horizon,
   sort,
+  teamStrength,
 }: {
   teams: FplTeam[]
   fixtures: FixtureIndex
@@ -60,6 +69,8 @@ export function buildClubBlocks({
   startGameweek: number
   horizon: Horizon
   sort: ClubSort
+  /** Team Strength per club, 0 to 10 (section 6.7). */
+  teamStrength: Map<number, number>
 }): ClubBlock[] {
   // The horizon selects the columns, exactly as it does in the Fixtures view,
   // so the two stay the same shape and the cells on screen are always the ones
@@ -83,6 +94,7 @@ export function buildClubBlocks({
       fixturesFor(fixtures, team.id, gameweek)
     ),
     owned: squadByClub.get(team.id) ?? [],
+    teamStrength: teamStrength.get(team.id) ?? 0,
   }))
 
   return sortClubBlocks(blocks, sort)
@@ -96,9 +108,11 @@ function sortClubBlocks(blocks: ClubBlock[], sort: ClubSort): ClubBlock[] {
     const primary =
       field === 'club'
         ? a.name.localeCompare(b.name)
-        : field === 'owned'
-          ? a.owned.length - b.owned.length
-          : a.score.score - b.score.score
+        : field === 'strength'
+          ? a.teamStrength - b.teamStrength
+          : field === 'owned'
+            ? a.owned.length - b.owned.length
+            : a.score.score - b.score.score
 
     if (primary !== 0) {
       return primary * direction

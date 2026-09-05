@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { fplRating, type Rating } from './difficulty'
+import { fplRating, type FixtureRating } from './difficulty'
 import { LAST_GAMEWEEK, type Horizon } from './horizon'
 import type { FplEvent, FplFixture, FplTeam } from './types'
 
@@ -35,16 +35,25 @@ export type TeamFixture = {
   opponentName: string
   isHome: boolean
   /**
-   * Difficulty, 1 to 5. Low is easy. Only shown in individual cells.
+   * Difficulty for this cell's **colour**, 1 to 5. Low is easy.
    *
-   * A whole number under FPL's own rating, a fraction under the custom one
-   * (section 6.7). Everything downstream treats it the same, which is why the
-   * two ratings need no other change: the cell shading rounds for its band and
-   * the Fixture Score keeps the full precision.
+   * A whole number under FPL's own rating, a fraction under the derived ones
+   * (section 6.7). Never rendered as a number in the cell itself; it is behind
+   * hover and tap, because a third figure is unreadable across 36 columns on a
+   * phone.
    */
   fdr: number
-  /** `6 - fdr`, the inverted value the Fixture Score sums. Section 6.1. */
+  /**
+   * `6 - scoreFdr`, the inverted value the Fixture Score sums (section 6.1).
+   *
+   * **Derived from the score rating, not from `fdr`.** In blend mode the two
+   * differ on purpose: the cell is blended, the Fixture Score is not, because
+   * blending it would double-count team quality against the Team Strength
+   * column beside it (section 6.7).
+   */
   value: number
+  /** The difficulty `value` came from, for anything that needs it back. */
+  scoreFdr: number
 }
 
 /**
@@ -64,7 +73,11 @@ export type FixtureIndex = Map<number, Map<number, TeamFixture[]>>
 export function buildFixtureIndex(
   fixtures: FplFixture[],
   teams: FplTeam[],
-  rating: Rating = fplRating
+  rating: FixtureRating = {
+    colour: fplRating,
+    score: fplRating,
+    teamStrength: new Map(),
+  }
 ): FixtureIndex {
   const clubsById = new Map(teams.map((team) => [team.id, team]))
   const index: FixtureIndex = new Map(teams.map((team) => [team.id, new Map()]))
@@ -88,11 +101,12 @@ function addFixture(
   clubsById: Map<number, FplTeam>,
   fixture: FplFixture,
   forHome: boolean,
-  rating: Rating
+  rating: FixtureRating
 ): void {
   const teamId = forHome ? fixture.team_h : fixture.team_a
   const opponentId = forHome ? fixture.team_a : fixture.team_h
-  const fdr = rating(fixture, forHome)
+  const fdr = rating.colour(fixture, forHome)
+  const scoreFdr = rating.score(fixture, forHome)
 
   const byGameweek = index.get(teamId)
   const opponent = clubsById.get(opponentId)
@@ -109,7 +123,8 @@ function addFixture(
     opponentName: opponent.name,
     isHome: forHome,
     fdr,
-    value: 6 - fdr,
+    scoreFdr,
+    value: 6 - scoreFdr,
   })
 
   byGameweek.set(gameweek, existing)

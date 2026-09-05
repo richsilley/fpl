@@ -68,6 +68,8 @@ export const CLUB_SORTS = [
   'club-desc',
   'owned-desc',
   'owned-asc',
+  'strength-desc',
+  'strength-asc',
 ] as const
 export type ClubSort = (typeof CLUB_SORTS)[number]
 
@@ -80,7 +82,7 @@ export function parseClubSort(value: string | undefined): ClubSort {
     : DEFAULT_CLUB_SORT
 }
 
-export type ClubSortField = 'score' | 'club' | 'owned'
+export type ClubSortField = 'score' | 'club' | 'owned' | 'strength'
 
 export function splitClubSort(sort: ClubSort): {
   field: ClubSortField
@@ -94,6 +96,7 @@ export function splitClubSort(sort: ClubSort): {
 const FIRST_DIRECTION: Record<ClubSortField, 'asc' | 'desc'> = {
   score: 'desc',
   owned: 'desc',
+  strength: 'desc',
   club: 'asc',
 }
 
@@ -135,12 +138,16 @@ export function ownershipModeOf(
 }
 
 /**
- * Which fixture difficulty rating the horizon views score with (section 6.7).
+ * Which fixture difficulty rating the horizon views use (section 6.7).
+ *
+ * `fpl` is FPL's own pre-season FDR. `form` derives one from results.
+ * `blend` additionally offsets it by the club's own strength, and changes
+ * **matrix colours only** — the Fixture Score is the same as `form`.
  *
  * Defaults to FPL's own, so a link with no opinion reproduces the official
  * numbers and nobody is shown a derived rating without having asked for it.
  */
-export const RATING_SOURCES = ['fpl', 'custom'] as const
+export const RATING_SOURCES = ['fpl', 'form', 'blend'] as const
 export type RatingSource = (typeof RATING_SOURCES)[number]
 export const DEFAULT_RATING: RatingSource = 'fpl'
 
