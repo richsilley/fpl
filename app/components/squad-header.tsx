@@ -92,8 +92,6 @@ export function SquadHeader({
       }`}
     >
       <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2">
-        <MenuButton href={menuHref} />
-
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h2 className="truncate text-lg font-semibold tracking-tight text-neutral-900 sm:text-xl dark:text-neutral-50">
@@ -135,6 +133,8 @@ export function SquadHeader({
           <StatGroup label={`Gameweek ${manager.gameweek}`} stats={stats} />
           <StatGroup label="Overall" stats={overall} />
         </div>
+
+        <MenuButton href={menuHref} />
       </div>
     </header>
   )
@@ -142,11 +142,15 @@ export function SquadHeader({
 
 /**
  * The way into the menu, which holds the manager ID form and the view-as
- * picker. Always beside the team name, so it travels with the sticky bar.
+ * picker. Always in the header, so it travels with the sticky bar.
  *
  * Shaped like the Ownership view's "Compare against" button rather than a
  * hamburger: both open a panel of settings over the page, and two different
  * shapes for one idea made the app look like two apps.
+ *
+ * At the right-hand end, after the figures. The identity is what the bar is
+ * for and should be the first thing read; a control ahead of it took the
+ * position of most importance to say the least.
  */
 function MenuButton({ href }: { href: string }) {
   return (
@@ -155,7 +159,7 @@ function MenuButton({ href }: { href: string }) {
       scroll={false}
       className="inline-flex shrink-0 items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
     >
-      <span className="font-semibold">Configure</span>
+      <span className="font-semibold">Options</span>
       <span aria-hidden className="text-[10px]">
         &#9662;
       </span>

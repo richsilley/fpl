@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.20
+**Version:** 1.21
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -695,7 +695,7 @@ The app is four views over one squad. Everything else is chrome, and chrome had 
 
 #### The menu
 
-**Loading a squad and viewing as another manager live in a drawer** behind a **Configure** button in the header, shaped like the Ownership view's "Compare against" button. Both open a panel of settings over the page, and two different shapes for one idea made the app look like two apps. Both are done once and then forgotten, so they cost one click on the rare occasion they are wanted and give the views the top of the page back. A drawer rather than a dropdown because it holds two full controls, one a two-step cascade, and both want room at 380px.
+**Loading a squad and viewing as another manager live in a drawer** behind an **Options** button at the right-hand end of the header, shaped like the Ownership view's "Compare against" button. It sits after the figures rather than before the team name: the identity is what the bar is for and should be read first, and a control ahead of it took the position of most importance to say the least. Both open a panel of settings over the page, and two different shapes for one idea made the app look like two apps. Both are done once and then forgotten, so they cost one click on the rare occasion they are wanted and give the views the top of the page back. A drawer rather than a dropdown because it holds two full controls, one a two-step cascade, and both want room at 380px.
 
 Before a squad is loaded there is no header and no menu, so the title and the ID form stay on the page.
 
