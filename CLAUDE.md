@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.21; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.22; v1 feature complete).
 
 ## What this is
 
@@ -291,7 +291,16 @@ other would be a visible bug. Add view-specific shaping in its own module
 (`clubs.ts`, `reference.ts`), not in the loader.
 
 Shared cell/badge rendering and both colour scales live in
-`app/components/fixture-visuals.tsx`. Don't re-implement per view.
+`app/components/fixture-visuals.tsx` — `FixtureCell`, `ScoreBadge`,
+`StrengthBadge`, `fdrTone`, `scoreTone`. Don't re-implement per view. The two
+`StrengthBadge` copies were identical until one of them needed the display
+floor below, which is exactly how the two views start disagreeing.
+
+**Team Strength is floored at 0.5 for display only** (`MIN_DISPLAYED_STRENGTH`).
+The scale is linear across the twenty clubs, so the bottom club lands on exactly
+0.0 by construction, and "0.0" reads as a figure that failed to load rather than
+as the lowest one there is. Nothing that sorts, ranks or colours sees the floor,
+so the bottom club is still bottom and still shaded as such.
 
 ## Horizon control (§7.6) — Fixtures and Teams only
 
@@ -308,10 +317,39 @@ presets are real links, the input is in a real GET form. It's keyed on
 `view.horizon` at the call site so navigation remounts it — don't reintroduce a
 `useEffect` to resync, lint forbids setState-in-effect.
 
-Columns start at the first **unfinished** gameweek, not `is_current`. Once a
-gameweek finishes `is_current` still points at it until the next deadline, so
-taking §7.2 literally would lead with a dead column and fold a played gameweek
-into the score.
+**Columns start at the first gameweek whose deadline has not passed** —
+`firstUpcomingGameweek` compares `deadline_time_epoch` against now. A gameweek
+leaves the matrix at its deadline, not when it finishes; those are days apart
+(Friday deadline, Monday final whistle) and everything this view is for happens
+before the deadline. After it the team is locked, so the column offers a plan
+that can no longer be made and the Fixture Score describes a run already under
+way. It was `!finished` and showed a dead GW3 all weekend.
+
+Read the timestamp, not the `is_current` / `finished` flags: same instant,
+but a value we compare ourselves rather than a flag we wait for FPL to flip,
+and deadlines are fixed dates so an hour-old cached `events` cannot make it
+stale. `getCurrentGameweek()` (for `picks/`) still uses `is_current` and must —
+that one *is* asking about the gameweek being played.
+
+## Writing copy
+
+Applies to every string a reader sees — headings, labels, tooltips, legends.
+
+- **Sentence case for all headings.** Proper nouns and the four view names keep
+  their capitals; nothing else does.
+- **Bold only for things the user clicks or types.** Not for emphasis. A legend
+  full of bold is a legend with no emphasis left.
+- **No exclamation marks. Never "simply" or "just"** — both tell a stuck reader
+  that their problem is easy, which is the least useful thing to say.
+- **Say what a thing is for, not what it is.** "Plan around what's ahead" over
+  "a grid of fixtures". Someone choosing a tab is choosing a job.
+- **A control group labels its shared word once.** The difficulty buttons read
+  FPL / Form / Blended under a "Difficulty" label, not "FDR (FPL)" three times.
+  What differs goes on the buttons; what they share goes on the label.
+- **The legend describes every mode, whichever is selected.** It used to swap
+  its last paragraph for the live mode, so the only way to learn what a mode did
+  was to switch to it — backwards, since the text exists to help you choose.
+  It also keeps the block the same height, so nothing reflows on a switch.
 
 ## The four views
 

@@ -9,7 +9,7 @@ import {
 } from '@/lib/fpl/params'
 
 /**
- * Switches between FPL's own fixture difficulty and the one derived from
+ * Switches between FPL's own fixture difficulty and the two derived from
  * results (section 6.7).
  *
  * Two links rather than a checkbox, because the choice belongs in the URL: a
@@ -19,7 +19,15 @@ import {
  *
  * It sits beside the horizon control because both shape the same two views,
  * and it appears on both of them, since a rating that applied to Fixtures but
- * not Club Blocks would let the two disagree about the same club.
+ * not Teams would let the two disagree about the same club.
+ *
+ * ## The buttons do not say "FDR"
+ *
+ * They used to read "FDR (FPL)", "FDR (Form)" and "FDR × Strength", which put
+ * the same three letters on screen three times to distinguish three things
+ * that differ in the other word. The group label carries it once and the
+ * buttons carry only what separates them. Each has a tooltip, because the
+ * difference between Form and Blended is not something one word can hold.
  */
 export function RatingToggle({
   managerId,
@@ -41,30 +49,37 @@ export function RatingToggle({
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="text-sm text-neutral-500 dark:text-neutral-400">
-        View
+      <span
+        id="difficulty-label"
+        className="text-sm text-neutral-500 dark:text-neutral-400"
+      >
+        Difficulty
       </span>
-      <span className="inline-flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700">
+      <span
+        role="group"
+        aria-labelledby="difficulty-label"
+        className="inline-flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700"
+      >
         <Option
           href={href('fpl')}
           selected={rating === 'fpl'}
-          title="FPL's own fixture difficulty rating, fixed before the season started"
+          title="The official rating. Set before the season started and never updated."
         >
-          FDR (FPL)
+          FPL
         </Option>
         <Option
           href={href('form')}
           selected={rating === 'form'}
-          title="Derived from results: recent goal difference and points, shrunk towards a prior, with a league-wide home advantage"
+          title="Our rating, built from results so far. Updates weekly."
         >
-          FDR (Form)
+          Form
         </Option>
         <Option
           href={href('blend')}
           selected={rating === 'blend'}
-          title="Form, offset by the club's own strength: how hard the fixture is for them. Changes cell colours only — the Fixture Score is the same as Form"
+          title="The form rating, adjusted for how good each club is. Changes cell colours only."
         >
-          FDR &times; Strength
+          Blended
         </Option>
       </span>
     </div>

@@ -1,7 +1,7 @@
 import {
   FixtureCell,
   ScoreBadge,
-  scoreTone,
+  StrengthBadge,
 } from '@/app/components/fixture-visuals'
 import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
 import {
@@ -171,18 +171,6 @@ export function FixturesTable({
  * club reading 7.9 there and something else here would be a bug the reader
  * could see.
  */
-function StrengthBadge({ value }: { value: number }) {
-  return (
-    <span
-      title={`Team Strength ${value.toFixed(1)} of 10`}
-      className={`inline-flex items-baseline rounded px-1.5 py-0.5 text-sm tabular-nums ${scoreTone(value)}`}
-    >
-      <span className="font-semibold">{value.toFixed(1)}</span>
-      <span className="sr-only"> team strength out of 10</span>
-    </span>
-  )
-}
-
 function PlayerRow({
   player,
   view,

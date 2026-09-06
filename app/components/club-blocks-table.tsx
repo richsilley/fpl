@@ -3,7 +3,7 @@ import Link from 'next/link'
 import {
   FixtureCell,
   ScoreBadge,
-  scoreTone,
+  StrengthBadge,
 } from '@/app/components/fixture-visuals'
 import { MAX_PLAYERS_PER_CLUB, type ClubBlock } from '@/lib/fpl/clubs'
 import { horizonGameweeks, type Horizon } from '@/lib/fpl/fixtures'
@@ -294,26 +294,6 @@ function OwnedCell({
  * against a weak side is a different proposition from an easy run against a
  * strong one.
  */
-function StrengthBadge({
-  value,
-  compact = false,
-}: {
-  value: number
-  compact?: boolean
-}) {
-  return (
-    <span
-      title={`Team Strength ${value.toFixed(1)} of 10`}
-      className={`inline-flex items-baseline rounded px-1.5 py-0.5 tabular-nums ${
-        compact ? 'text-[11px]' : 'text-sm'
-      } ${scoreTone(value)}`}
-    >
-      <span className="font-semibold">{value.toFixed(1)}</span>
-      <span className="sr-only"> team strength out of 10</span>
-    </span>
-  )
-}
-
 /** The count on its own, for the narrow layout where names do not fit. */
 function OwnedBadge({ count, atLimit }: { count: number; atLimit: boolean }) {
   return (

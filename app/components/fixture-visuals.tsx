@@ -147,6 +147,46 @@ export function FixtureCell({ fixtures }: { fixtures: TeamFixture[] }) {
 }
 
 /**
+ * The weakest club in the league, displayed.
+ *
+ * Team Strength is a linear scale across the twenty clubs, so whoever sits at
+ * the bottom lands on exactly 0.0 by construction — and "0.0" reads as a
+ * figure that failed to load rather than as the lowest one there is. Floored
+ * for display only: nothing that ranks, sorts or colours a club sees this, so
+ * the bottom club is still bottom and still shaded as such.
+ */
+const MIN_DISPLAYED_STRENGTH = 0.5
+
+/**
+ * Team Strength: how in form a club is, 0 to 10, on the same colour bands as
+ * Fixture Score.
+ *
+ * Shared rather than one copy per view, which is what the two had. They were
+ * identical, and the floor above is exactly the kind of rule that would have
+ * been applied to one of them.
+ */
+export function StrengthBadge({
+  value,
+  compact = false,
+}: {
+  value: number
+  compact?: boolean
+}) {
+  const shown = Math.max(value, MIN_DISPLAYED_STRENGTH).toFixed(1)
+  return (
+    <span
+      title={`Team Strength ${shown} of 10`}
+      className={`inline-flex items-baseline rounded px-1.5 py-0.5 tabular-nums ${
+        compact ? 'text-[11px]' : 'text-sm'
+      } ${scoreTone(value)}`}
+    >
+      <span className="font-semibold">{shown}</span>
+      <span className="sr-only"> team strength out of 10</span>
+    </span>
+  )
+}
+
+/**
  * Section 6.3: the score to one decimal place, then the fixture count in
  * brackets, e.g. "7.2 (5)".
  *

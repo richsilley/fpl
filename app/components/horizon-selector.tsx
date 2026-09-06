@@ -67,7 +67,7 @@ export function HorizonSelector({
         id="horizon-label"
         className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
       >
-        Fixture Score over, in gameweeks
+        Horizon
       </span>
 
       <span className="flex flex-wrap items-center gap-2">
@@ -150,13 +150,14 @@ export function HorizonSelector({
             onChange={(event) => setDraft(event.target.value)}
             className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm tabular-nums text-neutral-900 focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500/30 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           />
-          {/* Abbreviated so the unit stays beside the input. Spelled out, it
-              is wide enough to wrap onto a line of its own on a phone. */}
+          {/* The label is now one word, which leaves room to spell the unit
+              out. The reader has to know what the number counts, and "GW"
+              only reads as gameweeks to someone who already knows. */}
           <span
             aria-hidden
             className="text-sm text-neutral-500 dark:text-neutral-400"
           >
-            GW
+            gameweeks
           </span>
           <button
             type="submit"

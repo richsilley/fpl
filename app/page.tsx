@@ -84,14 +84,26 @@ import { getBootstrap } from '@/lib/fpl/api'
  */
 export const maxDuration = 60
 
-/** The question each view answers, from sections 7.2 to 7.5. */
+/**
+ * What each view is for, from sections 7.2 to 7.5.
+ *
+ * Says what the view is *for*, not what it contains: a reader deciding which
+ * tab to open is choosing a job, not a column list.
+ */
 const VIEW_QUESTIONS: Record<ViewId, string> = {
-  fixtures: 'Where are my fixture problems?',
+  fixtures:
+    "Plan around what's ahead. See every player's fixture difficulty from the current gameweek to the end of the season.",
   form: 'Who is playing well, and who is at risk?',
   ownership:
     'Is this player worth owning, given who else owns them and where I sit?',
   clubs: 'Who should I buy?',
 }
+
+/**
+ * Views whose subtitle already states the range, so the "Gameweek N onwards"
+ * suffix would say it twice.
+ */
+const STATES_OWN_RANGE: ReadonlySet<ViewId> = new Set<ViewId>(['fixtures'])
 
 /**
  * The matrix: fifteen player rows, with the columns changing per view
@@ -427,6 +439,7 @@ async function MatrixSection({
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
                 {VIEW_QUESTIONS[view]}
                 {usesHorizon(view) &&
+                  !STATES_OWN_RANGE.has(view) &&
                   ` Gameweek ${data.startGameweek} onwards.`}
               </p>
             </div>
@@ -565,7 +578,7 @@ async function MatrixSection({
 
           {/* The legend explains fixture shading and the Fixture Score, neither
             of which the Form view shows. */}
-          {usesHorizon(view) && <FixturesLegend rating={rating} />}
+          {usesHorizon(view) && <FixturesLegend />}
           {view === 'form' && <FormLegend />}
         </section>
       </div>

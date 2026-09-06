@@ -217,18 +217,30 @@ export function gameweekColumns(startGameweek: number): number[] {
 }
 
 /**
- * The first gameweek still to be played, which is where the columns start.
+ * The first gameweek you can still act on, which is where the columns start.
  *
- * Section 7.2 says "from the current one through GW38". The API's `is_current`
- * advances at each deadline, so once a gameweek finishes it stays current
- * until the next deadline: taking it literally would lead with a column of
- * results nobody can act on, and worse, would fold a finished gameweek into
- * the Fixture Score, which is meant to describe the run ahead. The first
- * unfinished gameweek is the current one in the sense a manager means it. Mid
- * gameweek that is the one being played; once it finishes it is the next one.
+ * **A gameweek leaves the matrix when its deadline passes, not when it
+ * finishes.** These are days apart — a Friday deadline against a Monday night
+ * final whistle — and everything the matrix is for happens before the
+ * deadline. Once it has gone the team is locked, so a column for it offers a
+ * plan that can no longer be made, and folding it into the Fixture Score
+ * describes a run that is already under way rather than the one ahead.
+ *
+ * Read from `deadline_time_epoch` rather than the `is_current` / `finished`
+ * flags. It is the same instant `is_current` turns on, but it is a timestamp
+ * we can compare ourselves instead of a flag we wait for FPL to flip, and it
+ * cannot be stale: `events` may be up to an hour old from the cache, while
+ * these deadlines are fixed dates that never move within a season.
  */
-export function firstUpcomingGameweek(events: FplEvent[]): number {
-  return events.find((event) => !event.finished)?.id ?? LAST_GAMEWEEK
+export function firstUpcomingGameweek(
+  events: FplEvent[],
+  now: number = Date.now()
+): number {
+  const nowSeconds = now / 1000
+  return (
+    events.find((event) => event.deadline_time_epoch > nowSeconds)?.id ??
+    LAST_GAMEWEEK
+  )
 }
 
 function rangeInclusive(from: number, to: number): number[] {

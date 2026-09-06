@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.21
+**Version:** 1.22
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -217,11 +217,19 @@ Distance decay, weighting nearer gameweeks more heavily than distant ones, is de
 
 FPL's FDR is set before a ball is kicked and never moves. A promoted side that turns out to be decent keeps its easy rating all season; a big club in freefall keeps its hard one. Two derived alternatives sit alongside it, **toggled per 8.2 so a shared link carries which one produced it**.
 
-| `rating=` (labelled **View**) | Matrix colour | Fixture Score | Team Strength |
+| `rating=` (group labelled **Difficulty**) | Matrix colour | Fixture Score | Team Strength |
 |---|---|---|---|
-| `fpl` *(default)*, shown as **FDR (FPL)** | FPL integers | from FPL FDR | ours |
-| `form`, shown as **FDR (Form)** | `plainFDR` | from `plainFDR` | ours |
-| `blend`, shown as **FDR × Strength** | `blendFDR` | **from `plainFDR`** | ours |
+| `fpl` *(default)*, shown as **FPL** | FPL integers | from FPL FDR | ours |
+| `form`, shown as **Form** | `plainFDR` | from `plainFDR` | ours |
+| `blend`, shown as **Blended** | `blendFDR` | **from `plainFDR`** | ours |
+
+**The buttons do not repeat "FDR".** They read "FDR (FPL)", "FDR (Form)" and "FDR × Strength", which put the same three letters on screen three times to separate three things that differ in the other word. The group label carries it once; the buttons carry only what distinguishes them. Each gets a hover tooltip, since the gap between Form and Blended is not something one word holds:
+
+| Button | Tooltip |
+|---|---|
+| FPL | The official rating. Set before the season started and never updated. |
+| Form | Our rating, built from results so far. Updates weekly. |
+| Blended | The form rating, adjusted for how good each club is. Changes cell colours only. |
 
 **FPL's own rating is the default.** Nobody is shown a derived number without having asked for it. An unrecognised value falls back to `fpl`, which includes the retired `custom` from the previous two-mode version.
 
@@ -335,6 +343,8 @@ Immediately right of Fixture Score, on the same 0 to 10 scale with the same colo
 
 **Both horizon views carry it**, on the Fixtures view against each player's club. The pair answers one question, and it would be odd for the answer to be available on one of the two views that ask it. On Fixtures it is not frozen — two pinned columns leave a phone almost no room to scroll the gameweeks — so Fixture Score stays with the name and Team Strength is the first column to scroll.
 
+**The displayed value is floored at 0.5; the calculation is unchanged.** The scale is linear across the twenty clubs, so whichever club is bottom lands on exactly 0.0 by construction — and a lone "0.0" in a column of real numbers reads as a figure that failed to load rather than as the weakest side in the league. The floor is applied at render only: sorting, ranking and the colour bands all see the true value, so the bottom club is still bottom and still shaded as such.
+
 **These are real columns at every width, phones included.** They used to collapse below the `sm` breakpoint into a row of bare badges under the club name. That left three numbers with no headings, unreadable unless you already knew what they were, and it took the sort with it: the headers are the only way to reorder the table, so the view lost its one interaction on the device where scanning twenty rows needs it most. The table already scrolls sideways behind a frozen first column, which is the pattern every other view uses; these columns simply join that scroll.
 
 #### Matrix cells
@@ -395,6 +405,8 @@ The control is a two-step cascade — **View as → from league → team** — a
 
 **Question answered:** where are my fixture problems?
 
+**On screen the view is titled "Fixtures", with the subtitle "Plan around what's ahead. See every player's fixture difficulty from the current gameweek to the end of the season."** The question above is what the view is *for*, not what it says to the reader. The old subtitle, "Where are my fixture problems? Gameweek 3 onwards.", asked the reader a question they had come to the view to answer, and then appended the range as a sentence fragment. Since the subtitle now states the range in words, the "Gameweek N onwards" suffix is dropped here; Teams still carries it.
+
 - **Columns are the gameweeks in the selected horizon**, starting at the current one. Selecting 5 shows five columns; selecting 1 shows one. Gameweeks outside the window are not dimmed or banded, they are not rendered. **All** shows the rest of the season, through GW38
 - Column headers read `GW3`, `GW4` and so on, not bare numbers
 - Each cell shows the opponent, home/away indicator, and is shaded by FDR
@@ -403,7 +415,23 @@ The control is a two-step cascade — **View as → from league → team** — a
 - A summary column shows the **Fixture Score** (section 6) over a user-selected horizon, displayed as score with fixture count in brackets
 - Horizon control per section 7.6
 
-**"The current one" means the first gameweek not yet finished, not the API's `is_current`.** The two differ for most of the week. `is_current` advances at each deadline and stays on a gameweek after it finishes, so taking it literally would lead with a column of results nobody can act on, and would fold a played gameweek into the Fixture Score, which is meant to describe the run ahead. Mid-gameweek the first unfinished gameweek is the one being played; once it finishes it becomes the next one. The same start gameweek drives both views.
+**"The current one" means the first gameweek whose deadline has not passed. A gameweek leaves the matrix at its deadline, not when it finishes.** The two are days apart — a Friday deadline against a Monday night final whistle — and everything this view is for happens before the deadline. Once it has gone the team is locked for that gameweek, so a column for it offers a plan that can no longer be made, and folding it into the Fixture Score describes a run already under way rather than the one ahead. It previously dropped a gameweek only once it was *finished*, which left a dead GW3 leading the matrix all weekend.
+
+Take it from `deadline_time_epoch` rather than the `is_current` or `finished` flags. It is the same instant `is_current` turns on, but it is a timestamp we compare ourselves instead of a flag we wait on FPL to flip, and it cannot go stale in the cache: the payload may be an hour old, while deadlines are fixed dates that do not move within a season. The gameweek used to fetch `picks/` is a different question and still follows `is_current`, since that one really is asking which gameweek is being played. The same start gameweek drives both horizon views.
+
+#### The legend
+
+Below the table, on both horizon views. Three definitions, then why two of them are separate, then all three difficulty modes:
+
+- **Fixture cells** — how hard each fixture is. Green is easy, red is hard
+- **Fixture Score** — the run ahead, 0 to 10. Higher is better, 6.0 is average. It measures the opposition only, not how good your own club is. The bracket is the number of fixtures: 7.2 (5) means 7.2 across five games
+- **Team Strength** — how in form the club is right now, 0 to 10
+- Then: *The two are separate on purpose. Coventry have easy fixtures but are bottom of the form table. Chelsea have hard fixtures and are flying. Those are different bets, and one number would hide that.*
+- Then **Difficulty modes**, with one line each for FPL, Form and Blended
+
+**All three modes are described at all times. Do not swap the text for whichever mode is selected.** It used to, which meant the only way to find out what a mode did was to switch to it — backwards, since the paragraph exists to help the reader choose. Keeping all three also keeps the block a fixed height, so nothing below it moves when the mode changes.
+
+It is roughly half its former length. The removed material explained that a fixture cell's number and the summary number meant opposite things; cells no longer print a number at all (6.7), so the mismatch it warned about cannot arise, and the warning was the longest thing in the block.
 
 **The horizon selects the columns, not just the score.** Banding the horizon inside a full-season table was the earlier behaviour and is superseded: the matrix now only ever shows the run being scored, so the summary column and the cells beside it always describe the same gameweeks.
 
@@ -630,6 +658,8 @@ Column widths scale to the number on show, and a trailing spacer absorbs any wid
 
 Shared by the Fixtures and Teams views. Both must read from the same `horizon` URL parameter, so switching between the views preserves it.
 
+**Labelled "Horizon", and the unit is spelled out.** It read "Fixture Score over, in gameweeks", which named a different control's output and then had to explain its own units in a trailing clause. One word says what it is; the row then reads presets, then "or [input] gameweeks [Apply]", so the unit sits with the number it counts rather than being abbreviated to "GW".
+
 - **Preset buttons** for 1, 3, 5, 7 and **All**, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline. **All** is not a fixed number: it resolves to the gameweeks remaining, so it moves as the season does and is highlighted whenever the applied horizon happens to be the whole remainder
 - **Numeric input** accepting any integer from 1 to the number of gameweeks remaining in the season
 - Clicking a preset sets the numeric input
@@ -724,6 +754,17 @@ Unlike the scratch squad, these are **not** carried between views: an overlay is
 #### One gutter for the whole page
 
 The sticky bars bleed to the window edge but pad themselves back to the same gutter as the content below, and both are capped at the same width and centred. The menu button, the view tabs and every table therefore start on exactly the same vertical line, and the margins are equal on both sides. Before this the bars were centred within a maximum width while the page content ran the full window, so the two disagreed by however wide the window was.
+
+### 7.9 Writing the copy
+
+Applies to every string a reader sees: headings, labels, buttons, tooltips, legends, empty states.
+
+- **Sentence case for all headings.** Proper nouns and the four view names keep their capitals; nothing else does
+- **Bold only for things the user clicks or types.** Not for emphasis — a paragraph of bold has no emphasis left in it
+- **No exclamation marks, and never "simply" or "just".** Both tell a reader who is stuck that their problem is easy, which is the least useful thing that can be said to them
+- **Say what a thing is for, not what it is.** "Plan around what's ahead" over "a grid of fixtures". Someone reading a label is deciding whether to click it
+- **A group of controls labels its shared word once.** What differs goes on the buttons; what they have in common goes on the group label. Three buttons reading "FDR (FPL)", "FDR (Form)" and "FDR × Strength" spend most of their width on the part that carries no information
+- **Explanatory text describes every option, not the selected one.** Otherwise the only way to learn what an option does is to choose it, and the text moves under the reader every time they switch
 
 ## 8. Technical requirements
 
