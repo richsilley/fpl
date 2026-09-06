@@ -31,8 +31,22 @@ export const REQUEST_TIMEOUT_MS = 8_000
 export const CACHE_SECONDS = {
   /** Prices change once daily. */
   BOOTSTRAP: 60 * 60,
-  /** Changes rarely. */
-  FIXTURES: 60 * 60 * 24,
+  /**
+   * One hour, **not** the 24 in section 8.3's original table.
+   *
+   * The fixture *list* does change rarely, which is what that 24 was about.
+   * But the same payload carries `started`, `finished` and the scores, and
+   * those change every match day — and two features now read them: the
+   * form-based difficulty rating (6.7) and the Form view's average minutes
+   * (7.3).
+   *
+   * At 24 hours those disagreed with `bootstrap-static`, which refreshes
+   * hourly. Mid-gameweek the minutes said a player had played three matches
+   * while the fixtures still said two, and the average came out at 135 minutes
+   * per match. Any two figures divided by each other have to come from
+   * payloads of the same age, so this matches `BOOTSTRAP`.
+   */
+  FIXTURES: 60 * 60,
   /** Updates during and after matches. */
   LEAGUE_STANDINGS: 60 * 60,
   /**

@@ -23,7 +23,7 @@ export type Horizon = number
  * The control also offers "All", which is not a fixed number: it resolves to
  * the gameweeks remaining in the season, so it moves as the season does.
  */
-export const HORIZON_PRESETS = [1, 3, 5, 7] as const
+export const HORIZON_PRESETS = [1, 3, 5, 7, 9] as const
 
 export const DEFAULT_HORIZON: Horizon = 5
 

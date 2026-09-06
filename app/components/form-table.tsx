@@ -3,6 +3,7 @@ import Link from 'next/link'
 import {
   MATRIX_HEADER_HEIGHT,
   MATRIX_PLAYER_COLUMN,
+  MATRIX_PLAYER_COLUMN_END,
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
 import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
@@ -50,7 +51,11 @@ const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
 const PRICE_COLUMN = 'w-16 min-w-16'
 const TIGHT_COLUMN = 'w-12 min-w-12'
 const SEASON_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
-const BAR_COLUMN = 'w-20 min-w-20'
+// Wider than they were: a bar needs room before a high value and a low one
+// look different at a glance, which is the only reason the bars exist.
+const BAR_COLUMN = 'w-28 min-w-28'
+/** Matches the Fixture Score column, and sits in the same place (7.3). */
+const AVAILABILITY_COLUMN = 'w-24 min-w-24'
 /** Sized to its own header, which is wider than the number under it. */
 const XP_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
 
@@ -62,6 +67,7 @@ export function FormTable({
   carry,
   swapHref,
   overLimitTeamIds,
+  matchesPlayed,
 }: {
   squad: Squad
   managerId: string
@@ -73,9 +79,11 @@ export function FormTable({
   swapHref: ((playerId: number) => string) | null
   /** Clubs over the three-per-club limit, for the row accent (section 7.7). */
   overLimitTeamIds: Set<number>
+  /** Completed matches per club, the denominator for average minutes (7.3). */
+  matchesPlayed: Map<number, number>
 }) {
   const all = [...squad.startingXi, ...squad.bench]
-  const scales = barScales(all, squad.manager.gameweek)
+  const scales = barScales(all)
   const active = splitFormSort(sort)
 
   const sortHref = (field: FormSortField) =>
@@ -124,6 +132,17 @@ export function FormTable({
               )}
             </SortableHeader>
 
+            {/* Sits exactly where the Fixtures view puts Fixture Score, at the
+                same width and also frozen, so the two tables line up column
+                for column and switching between them moves nothing. */}
+            <th
+              scope="col"
+              title="Whether the player is expected to be available"
+              className={`sticky z-20 border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-center font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${MATRIX_PLAYER_COLUMN_END} ${AVAILABILITY_COLUMN}`}
+            >
+              Availability
+            </th>
+
             {/* Price block */}
             <SortableHeader
               href={sortHref('price')}
@@ -167,10 +186,21 @@ export function FormTable({
               href={sortHref('ppg')}
               active={active.field === 'ppg'}
               descending={active.descending}
-              className={`border-r ${TIGHT_COLUMN}`}
+              className={TIGHT_COLUMN}
               title="Points per game"
             >
               PPG
+            </SortableHeader>
+            {/* Beside the returns it summarises, and before the bars: it is
+                somebody else's conclusion about the columns to its left. */}
+            <SortableHeader
+              href={sortHref('xp')}
+              active={active.field === 'xp'}
+              descending={active.descending}
+              className={`border-r ${XP_COLUMN}`}
+              title="FPL's own expected points for the next gameweek. Their model, not this app's"
+            >
+              xP
             </SortableHeader>
 
             {/* The three bar columns, grouped so the only wide columns in the
@@ -190,7 +220,7 @@ export function FormTable({
               active={active.field === 'mins'}
               descending={active.descending}
               className={BAR_COLUMN}
-              title={`Minutes played, against the ${scales.maxMinutes} available so far`}
+              title="Average minutes per match their club has played, against the 90 available"
             >
               Mins
             </SortableHeader>
@@ -213,18 +243,6 @@ export function FormTable({
               DefCon
             </SortableHeader>
 
-            {/* Ruled off from the bar columns: everything to its left is an
-                input, and this is somebody else's conclusion drawn from them. */}
-            <SortableHeader
-              href={sortHref('xp')}
-              active={active.field === 'xp'}
-              descending={active.descending}
-              className={`border-l border-l-neutral-200 dark:border-l-neutral-700 ${XP_COLUMN}`}
-              title="FPL's own expected points for the next gameweek. Their model, not this app's"
-            >
-              xP (FPL)
-            </SortableHeader>
-
             {/* Absorbs the leftover width, exactly as the Fixtures table does.
                 The table is `w-full` so that it starts and ends where Fixtures
                 does and switching views does not shift it, but without this the
@@ -243,6 +261,7 @@ export function FormTable({
               key={player.id}
               player={player}
               scales={scales}
+              matchesPlayed={matchesPlayed.get(player.teamId) ?? 0}
               swapHref={swapHref}
               overLimitTeamIds={overLimitTeamIds}
             />
@@ -251,7 +270,7 @@ export function FormTable({
           <tr>
             <th
               scope="colgroup"
-              colSpan={12}
+              colSpan={13}
               className="sticky left-0 border-y border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/70 dark:text-neutral-400"
             >
               Bench
@@ -263,6 +282,7 @@ export function FormTable({
               key={player.id}
               player={player}
               scales={scales}
+              matchesPlayed={matchesPlayed.get(player.teamId) ?? 0}
               swapHref={swapHref}
               overLimitTeamIds={overLimitTeamIds}
               isBench
@@ -278,21 +298,23 @@ export function FormTable({
  * The denominators the bars are drawn against.
  *
  * Form and xGI are relative to the best in this squad, because the question
- * they answer is comparative. Minutes are relative to the minutes *available*,
- * which makes that bar a reliability reading rather than a comparison: a
- * player who has played every minute is always full, whoever else is in the
- * squad.
+ * they answer is comparative. Minutes are not here at all: they are measured
+ * per match against the 90 available, which makes that bar a reliability
+ * reading rather than a comparison — a player who plays every minute is
+ * always full, whoever else is in the squad.
  */
-type BarScales = { maxForm: number; maxXgi: number; maxMinutes: number }
+type BarScales = { maxForm: number; maxXgi: number }
 
-function barScales(players: SquadPlayer[], gameweeksPlayed: number): BarScales {
+/** Minutes in a match: what the Mins bar is measured against. */
+export const MINUTES_IN_A_MATCH = 90
+
+function barScales(players: SquadPlayer[]): BarScales {
   return {
     maxForm: Math.max(...players.map((p) => Number(p.form) || 0), 0),
     maxXgi: Math.max(
       ...players.map((p) => Number(p.expectedGoalInvolvements) || 0),
       0
     ),
-    maxMinutes: Math.max(1, gameweeksPlayed * 90),
   }
 }
 
@@ -344,10 +366,12 @@ function PlayerRow({
   scales,
   swapHref,
   overLimitTeamIds,
+  matchesPlayed,
   isBench = false,
 }: {
   player: SquadPlayer
   scales: BarScales
+  matchesPlayed: number
   swapHref: ((playerId: number) => string) | null
   overLimitTeamIds: Set<number>
   isBench?: boolean
@@ -370,6 +394,12 @@ function PlayerRow({
   const form = Number(player.form) || 0
   const xgi = Number(player.expectedGoalInvolvements) || 0
   const threshold = defconThreshold(player.position)
+  // Section 7.3: a season total becomes abstract the moment clubs have played
+  // different numbers of matches, which blanks and doubles guarantee. Per
+  // match it stays comparable, and the bar is against the 90 available rather
+  // than against the squad, so a full bar means every minute played.
+  const minutesPerMatch =
+    matchesPlayed === 0 ? 0 : player.minutes / matchesPlayed
 
   return (
     <tr className={MATRIX_ROW_HEIGHT}>
@@ -378,7 +408,6 @@ function PlayerRow({
         className={`sticky left-0 z-10 border-b border-r border-neutral-200 px-2 py-1 text-left font-normal dark:border-neutral-800 ${rowBackground} ${PLAYER_COLUMN} ${overLimitAccent(player.teamId, overLimitTeamIds)}`}
       >
         <span className="flex items-baseline gap-1.5">
-          <StatusDot availability={availability} />
           <PlayerName
             name={player.name}
             href={swapHref === null ? null : swapHref(player.id)}
@@ -396,6 +425,15 @@ function PlayerRow({
           </span>
         )}
       </th>
+
+      {/* A bar, not a dot. At the width of the Fixture Score column it can be
+          read as a length rather than squinted at, and it lines up with the
+          Fixtures view so the eye lands in the same place. */}
+      <td
+        className={`sticky z-10 border-b border-r border-neutral-200 px-2 py-1.5 dark:border-neutral-800 ${rowBackground} ${MATRIX_PLAYER_COLUMN_END} ${AVAILABILITY_COLUMN}`}
+      >
+        <AvailabilityBar availability={availability} />
+      </td>
 
       <NumericCell background={rowBackground} width={PRICE_COLUMN}>
         {formatPrice(player.price)}
@@ -415,8 +453,11 @@ function PlayerRow({
       <NumericCell background={rowBackground} width={TIGHT_COLUMN}>
         {formatPoints(player.totalPoints)}
       </NumericCell>
-      <NumericCell background={rowBackground} width={TIGHT_COLUMN} edge>
+      <NumericCell background={rowBackground} width={TIGHT_COLUMN}>
         {player.pointsPerGame}
+      </NumericCell>
+      <NumericCell background={rowBackground} width={XP_COLUMN} edge>
+        {player.expectedPointsNext.toFixed(1)}
       </NumericCell>
 
       {/* The bar columns keep their numbers right-aligned. Centring them would
@@ -435,10 +476,10 @@ function PlayerRow({
         background={rowBackground}
         width={BAR_COLUMN}
         align="right"
-        bar={ratio(player.minutes, scales.maxMinutes)}
+        bar={ratio(minutesPerMatch, MINUTES_IN_A_MATCH)}
         barTone={BAR_TONE.mins}
       >
-        {formatPoints(player.minutes)}
+        {matchesPlayed === 0 ? <NotApplicable /> : Math.round(minutesPerMatch)}
       </NumericCell>
       <NumericCell
         background={rowBackground}
@@ -467,14 +508,6 @@ function PlayerRow({
         ) : (
           formatDefcon(player.defensiveContributionPer90)
         )}
-      </NumericCell>
-
-      {/* No data bar, deliberately. Every bar to the left is an input the
-          reader weighs; this is FPL's own summary of those inputs, and giving
-          it a bar would set it competing with the columns it is derived from
-          rather than reading as a conclusion drawn after them. */}
-      <NumericCell background={rowBackground} width={XP_COLUMN} edgeLeft>
-        {player.expectedPointsNext.toFixed(1)}
       </NumericCell>
 
       {/* Matches the spacer in the header. */}
@@ -572,15 +605,20 @@ function NumericCell({
  * band of grey, and a row can be scanned across without losing which is which.
  *
  * Still muted, and still not a scale: the constraint that these must not imply
- * good or bad holds, so the hues are chosen from ones this app does not
- * already use for meaning. Green is good, red is bad and amber is a doubt
- * elsewhere, so all three are avoided here.
+ * good or bad holds, so the hues avoid the three this app uses for meaning —
+ * green is good, red is bad and amber is a doubt.
+ *
+ * They were too close to each other to tell apart, which defeated the point of
+ * giving each column its own. These four are one step stronger and spread
+ * around the wheel: blue, grey, purple, teal. Teal sits next to green, which
+ * is safe here because DefCon is the one bar where a full length really does
+ * mean good — clearing the threshold.
  */
 const BAR_TONE = {
-  form: 'bg-sky-300/50 dark:bg-sky-500/25',
-  mins: 'bg-neutral-300/60 dark:bg-neutral-500/30',
-  xgi: 'bg-violet-300/50 dark:bg-violet-500/25',
-  defcon: 'bg-cyan-300/50 dark:bg-cyan-500/25',
+  form: 'bg-sky-400/55 dark:bg-sky-500/40',
+  mins: 'bg-slate-400/45 dark:bg-slate-400/30',
+  xgi: 'bg-violet-400/50 dark:bg-violet-500/40',
+  defcon: 'bg-teal-400/55 dark:bg-teal-500/40',
 } as const
 
 /**
@@ -618,27 +656,49 @@ function PriceChangeCell({
 }
 
 /**
- * Section 7.3's availability, as a dot immediately before the name: green
- * available, amber doubtful, red out.
+ * Availability as a bar in its own column, where the Fixtures view puts
+ * Fixture Score (section 7.3).
  *
- * Colour alone would fail anyone who cannot distinguish these, so the title
- * and the sr-only text carry the same information, and the news line beneath
- * the name spells out the reason whenever there is one.
+ * It used to be a dot beside the name, which made the two tables disagree
+ * about what their second column is, and left the flag too small to catch. At
+ * column width it is read at a glance and the header names it.
+ *
+ * Colour alone would fail anyone who cannot separate these, so anything other
+ * than available carries its own label on the bar — the chance of playing when
+ * the API gives one — and the title and screen-reader text always spell it out.
  */
-function StatusDot({ availability }: { availability: Availability }) {
+function AvailabilityBar({ availability }: { availability: Availability }) {
+  // Green for available, amber for doubtful, red for out. The dash is short
+  // and centred rather than filling the cell: at full width fifteen of them
+  // read as a solid block of colour, and the point is to pick out the one or
+  // two that are not green.
   const tone =
     availability.level === 'available'
-      ? 'bg-emerald-500'
+      ? 'bg-emerald-400/80 dark:bg-emerald-500/60'
       : availability.level === 'doubtful'
-        ? 'bg-amber-500'
-        : 'bg-rose-600'
+        ? 'bg-amber-400/90 dark:bg-amber-500/70'
+        : 'bg-rose-500/80 dark:bg-rose-600/70'
+
+  const caption: string =
+    availability.level === 'available'
+      ? ''
+      : availability.chance !== null
+        ? `${availability.chance}%`
+        : availability.label
 
   return (
-    <span
-      title={availability.label}
-      className={`inline-block h-2 w-2 shrink-0 rounded-full ${tone}`}
-    >
-      <span className="sr-only">{availability.label}. </span>
+    <span className="flex w-full justify-center">
+      <span
+        title={availability.label}
+        className={`flex items-center justify-center rounded-full ${
+          caption === '' ? 'h-2 w-10' : 'h-4 w-14 px-1'
+        } ${tone}`}
+      >
+        <span className="text-[10px] font-semibold leading-none text-neutral-900 dark:text-neutral-50">
+          {caption}
+        </span>
+        <span className="sr-only">{availability.label}</span>
+      </span>
     </span>
   )
 }

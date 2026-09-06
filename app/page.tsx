@@ -12,6 +12,8 @@ import Link from 'next/link'
 import { ManagerIdForm } from '@/app/components/manager-id-form'
 import { OwnershipModeSelector } from '@/app/components/ownership-mode-selector'
 import { OwnershipTable } from '@/app/components/ownership-table'
+import { AppMenu, MenuSection } from '@/app/components/app-menu'
+import { Overlay } from '@/app/components/overlay'
 import { RatingToggle } from '@/app/components/rating-toggle'
 import { ReplacementPanel } from '@/app/components/replacement-panel'
 import { ScratchStrip } from '@/app/components/scratch-strip'
@@ -27,6 +29,7 @@ import {
   parseClubSort,
   parseEntityId,
   parseFormSort,
+  parsePanel,
   parseRating,
   parseView,
   usesHorizon,
@@ -132,6 +135,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const scratchPairs = parseScratch(first(params.out), first(params.in))
   const swapFor = parseEntityId(first(params.swap))
   const dismissedStale = first(params.stale) === 'ok'
+  const panel = parsePanel(first(params.panel))
   // An unparseable league or rival ID falls back to global rather than
   // erroring, per section 8.2.
   const ownershipMode = ownershipModeOf(
@@ -140,21 +144,26 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   )
 
   return (
-    <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <div className="max-w-3xl">
-        <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
-          FPL Squad Matrix
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Load any manager&rsquo;s fifteen players, then switch the columns to
-          answer a different question.
-        </p>
-        <div className="mt-4">
-          <ManagerIdForm currentId={managerId} />
+    <main className="w-full flex-1 px-5 pb-10 pt-4 sm:px-8 lg:px-12">
+      {/* Before a squad is loaded there is no header and no menu to put the
+          form in, so it stays on the page. Once one is loaded, everything here
+          moves into the menu and the views take the top of the page. */}
+      {!managerId && (
+        <div className="mx-auto w-full max-w-[1600px]">
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
+            FPL Squad Matrix
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            Load any manager&rsquo;s fifteen players, then switch the columns to
+            answer a different question.
+          </p>
+          <div className="mt-4">
+            <ManagerIdForm currentId={managerId} />
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="mt-8">
+      <div className={managerId ? '' : 'mx-auto w-full max-w-[1600px] mt-8'}>
         {managerId ? (
           <MatrixSection
             managerId={managerId}
@@ -171,6 +180,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             scratchPairs={scratchPairs}
             swapFor={swapFor}
             dismissedStale={dismissedStale}
+            panel={panel}
           />
         ) : (
           <EmptyState />
@@ -195,6 +205,7 @@ async function MatrixSection({
   scratchPairs,
   swapFor,
   dismissedStale,
+  panel,
 }: {
   managerId: string
   view: ViewId
@@ -217,6 +228,8 @@ async function MatrixSection({
   swapFor: number | null
   /** The stale-pair notice has been dismissed for this link. */
   dismissedStale: boolean
+  /** Which overlay the URL asks for (section 7.8). */
+  panel: 'menu' | 'population' | null
 }) {
   const myId = parseManagerId(managerId)
   // Viewing as yourself is the same as not viewing as anyone. Collapsing it
@@ -318,85 +331,106 @@ async function MatrixSection({
     ...serialiseScratch(scratch.applied),
   })
 
+  // Overlays are pure URL state: opening one is a link and so is the backdrop
+  // that closes it (section 7.8).
+  const menuHref = buildHref({ ...base, ...carry, panel: 'menu' })
+  const populationHref = buildHref({ ...base, ...carry, panel: 'population' })
+  const closeOverlayHref = buildHref({ ...base, ...carry })
+  const backToMyTeamHref = buildHref({ ...base, ...withoutViewAs(carry) })
+
   return (
-    <div className="space-y-6">
-      {/* Sticky, so a warning created three swaps ago is still on screen when
-          the reader has stopped looking for it (section 7.7). */}
-      <ScratchStrip
-        scratch={scratch}
-        resetHref={resetHref}
-        undoHref={undoHref}
-        dismissHref={`${dismissStaleHref}&stale=ok`}
-        showDropped={!dismissedStale}
-      />
+    <div className="space-y-5">
+      {/* One sticky stack, so the header and the scratch strip cannot overlap
+          and both survive scrolling (sections 7.1 and 7.7). */}
+      <div className="sticky top-0 z-40 -mx-5 -mt-4 mb-1 sm:-mx-8 lg:-mx-12">
+        <SquadHeader
+          manager={data.squad.manager}
+          totalPlayers={data.totalPlayers}
+          menuHref={menuHref}
+          viewingAs={viewedId !== null}
+          backHref={backToMyTeamHref}
+        />
+        <ScratchStrip
+          scratch={scratch}
+          resetHref={resetHref}
+          undoHref={undoHref}
+          dismissHref={`${dismissStaleHref}&stale=ok`}
+          showDropped={!dismissedStale}
+        />
+      </div>
 
-      <SquadHeader
-        manager={data.squad.manager}
-        totalPlayers={data.totalPlayers}
-      />
+      <div className="mx-auto w-full max-w-[1600px] space-y-5">
+        {panel === 'menu' && (
+          <AppMenu closeHref={closeOverlayHref}>
+            <MenuSection title="Load a squad">
+              <ManagerIdForm currentId={managerId} />
+            </MenuSection>
+            <MenuSection title="View as another manager">
+              {/* Its own boundary: the league list is a cached call, and a slow
+                one must not hold up the drawer that is already open. */}
+              <Suspense
+                key={`viewas-${asLeagueId ?? 'none'}-${viewedId ?? 'me'}`}
+                fallback={<ViewAsPlaceholder />}
+              >
+                <ViewAsSection
+                  managerId={managerId}
+                  myId={myId}
+                  viewedManager={viewedId === null ? null : data.squad.manager}
+                  asLeagueId={asLeagueId}
+                  view={view}
+                  horizon={data.horizon}
+                  sort={rawSort}
+                  carry={carry}
+                  panel={panel}
+                />
+              </Suspense>
+            </MenuSection>
+          </AppMenu>
+        )}
 
-      {/* Whose squad you are looking at outranks which columns you are
-          looking at, so this sits above the tabs and stays on all four views.
-          Its own boundary: the league list is a cached call, and a slow one
-          must not hold up the squad that is already loaded. */}
-      <Suspense
-        key={`viewas-${asLeagueId ?? 'none'}-${viewedId ?? 'me'}`}
-        fallback={<ViewAsPlaceholder />}
-      >
-        <ViewAsSection
+        <ViewTabs
           managerId={managerId}
-          myId={myId}
-          viewedManager={viewedId === null ? null : data.squad.manager}
-          asLeagueId={asLeagueId}
           view={view}
           horizon={data.horizon}
           sort={rawSort}
           carry={carry}
         />
-      </Suspense>
 
-      <ViewTabs
-        managerId={managerId}
-        view={view}
-        horizon={data.horizon}
-        sort={rawSort}
-        carry={carry}
-      />
+        {swapFor !== null && view !== 'clubs' && (
+          <ReplacementSection
+            outgoing={
+              scratchPlayers.find((player) => player.id === swapFor) ?? null
+            }
+            squad={scratchPlayers}
+            data={viewData}
+            bootstrap={bootstrap}
+            currentView={view}
+            rawSort={rawSort}
+            ownershipMode={ownershipMode}
+            leagueId={leagueId}
+            rivalId={rivalId}
+            myId={myId}
+            totalPlayers={data.totalPlayers}
+            scratch={scratch}
+            base={base}
+            carry={carry}
+            closeHref={closePanelHref}
+          />
+        )}
 
-      {swapFor !== null && view !== 'clubs' && (
-        <ReplacementSection
-          outgoing={
-            scratchPlayers.find((player) => player.id === swapFor) ?? null
-          }
-          squad={scratchPlayers}
-          data={viewData}
-          bootstrap={bootstrap}
-          currentView={view}
-          rawSort={rawSort}
-          ownershipMode={ownershipMode}
-          leagueId={leagueId}
-          rivalId={rivalId}
-          myId={myId}
-          totalPlayers={data.totalPlayers}
-          scratch={scratch}
-          base={base}
-          carry={carry}
-          closeHref={closePanelHref}
-        />
-      )}
-
-      <section className="space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-              {VIEW_LABELS[view]}
-            </h2>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              {VIEW_QUESTIONS[view]}
-              {usesHorizon(view) && ` Gameweek ${data.startGameweek} onwards.`}
-            </p>
-          </div>
-          {/* Only the two horizon-driven views get these. Showing them on the
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+                {VIEW_LABELS[view]}
+              </h2>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                {VIEW_QUESTIONS[view]}
+                {usesHorizon(view) &&
+                  ` Gameweek ${data.startGameweek} onwards.`}
+              </p>
+            </div>
+            {/* Only the two horizon-driven views get these. Showing them on the
               Form view would offer settings that change nothing there. Both
               parameters are still carried through, so switching back to
               Fixtures returns to the horizon and rating you left (7.6, 6.7).
@@ -407,123 +441,134 @@ async function MatrixSection({
               The applied horizon, not the requested one, so a clamped value
               shows what is actually on screen. Keyed on it so a navigation
               remounts the control and its input picks up the new value. */}
-          {usesHorizon(view) && (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
-              <RatingToggle
-                managerId={managerId}
-                rating={rating}
-                view={view}
-                horizon={data.horizon}
-                sort={rawSort}
-                carry={carry}
-              />
-              <HorizonSelector
-                key={`${view}-${data.horizon}`}
-                managerId={managerId}
-                horizon={data.horizon}
-                maxHorizon={data.maxHorizon}
-                view={view}
-                sort={rawSort}
-                carry={carry}
-              />
-            </div>
-          )}
-        </div>
-
-        {view === 'clubs' ? (
-          <ClubBlocksTable
-            blocks={buildClubBlocks({
-              teams: data.teams,
-              fixtures: data.fixtures,
-              squad: viewData.squad,
-              startGameweek: data.startGameweek,
-              horizon: data.horizon,
-              sort,
-              teamStrength: data.teamStrength,
-            })}
-            managerId={managerId}
-            horizon={data.horizon}
-            startGameweek={data.startGameweek}
-            sort={sort}
-            carry={carry}
-          />
-        ) : view === 'form' ? (
-          <FormTable
-            squad={viewData.squad}
-            managerId={managerId}
-            sort={parseFormSort(rawSort ?? undefined)}
-            horizon={data.horizon}
-            carry={carry}
-            swapHref={swapHref}
-            overLimitTeamIds={scratch.warnings.overLimitTeamIds}
-          />
-        ) : view === 'ownership' ? (
-          <>
-            {/* The rival dropdown needs the league's manager list, which is
-                one cached standings call. Its own boundary so the mode links
-                are on screen at once, and so a slow or failed standings fetch
-                costs the dropdown and nothing else. */}
-            <Suspense
-              key={`selector-${leagueId ?? 'none'}`}
-              fallback={
-                <OwnershipModeSelector
+            {usesHorizon(view) && (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
+                <RatingToggle
                   managerId={managerId}
-                  manager={data.squad.manager}
-                  mode={ownershipMode}
-                  leagueId={leagueId}
-                  rivalId={rivalId}
+                  rating={rating}
+                  view={view}
                   horizon={data.horizon}
-                  sort={sort}
-                  members={null}
+                  sort={rawSort}
                   carry={carry}
                 />
-              }
-            >
-              <ModeSelectorSection
-                managerId={managerId}
-                manager={data.squad.manager}
-                mode={ownershipMode}
-                leagueId={leagueId}
-                rivalId={rivalId}
-                horizon={data.horizon}
-                sort={sort}
-                carry={carry}
-              />
-            </Suspense>
-            {/* The league population is one picks call per manager, up to
+                <HorizonSelector
+                  key={`${view}-${data.horizon}`}
+                  managerId={managerId}
+                  horizon={data.horizon}
+                  maxHorizon={data.maxHorizon}
+                  view={view}
+                  sort={rawSort}
+                  carry={carry}
+                />
+              </div>
+            )}
+          </div>
+
+          {view === 'clubs' ? (
+            <ClubBlocksTable
+              blocks={buildClubBlocks({
+                teams: data.teams,
+                fixtures: data.fixtures,
+                squad: viewData.squad,
+                startGameweek: data.startGameweek,
+                horizon: data.horizon,
+                sort,
+                teamStrength: data.teamStrength,
+              })}
+              managerId={managerId}
+              horizon={data.horizon}
+              startGameweek={data.startGameweek}
+              sort={sort}
+              carry={carry}
+            />
+          ) : view === 'form' ? (
+            <FormTable
+              squad={viewData.squad}
+              managerId={managerId}
+              sort={parseFormSort(rawSort ?? undefined)}
+              horizon={data.horizon}
+              carry={carry}
+              swapHref={swapHref}
+              overLimitTeamIds={scratch.warnings.overLimitTeamIds}
+              matchesPlayed={data.matchesPlayed}
+            />
+          ) : view === 'ownership' ? (
+            <>
+              {/* Floating, so opening it does not push the table it
+                describes down the page (section 7.8). The rival dropdown needs
+                the league's manager list, one cached standings call, behind
+                its own boundary so a slow fetch costs the dropdown alone. */}
+              {panel === 'population' && (
+                <Overlay closeHref={closeOverlayHref} label="Compare against">
+                  <div className="max-h-[calc(100vh-6rem)] overflow-y-auto">
+                    <Suspense
+                      key={`selector-${leagueId ?? 'none'}`}
+                      fallback={
+                        <OwnershipModeSelector
+                          managerId={managerId}
+                          manager={data.squad.manager}
+                          mode={ownershipMode}
+                          leagueId={leagueId}
+                          rivalId={rivalId}
+                          horizon={data.horizon}
+                          sort={sort}
+                          members={null}
+                          carry={carry}
+                          closeHref={closeOverlayHref}
+                        />
+                      }
+                    >
+                      <ModeSelectorSection
+                        managerId={managerId}
+                        manager={data.squad.manager}
+                        mode={ownershipMode}
+                        leagueId={leagueId}
+                        rivalId={rivalId}
+                        horizon={data.horizon}
+                        sort={sort}
+                        carry={carry}
+                        closeHref={closeOverlayHref}
+                      />
+                    </Suspense>
+                  </div>
+                </Overlay>
+              )}
+              {/* The league population is one picks call per manager, up to
                 fifty, and a single call runs over a second. Streaming means
                 the squad header, tabs and selector are on screen immediately
                 rather than the page hanging on the fan-out. Everything is
                 cached for the rest of the gameweek, so this only bites the
                 first time a league is opened. */}
-            <Suspense
-              key={`${ownershipMode}-${leagueId ?? rivalId ?? 'global'}`}
-              fallback={<OwnershipLoading mode={ownershipMode} />}
-            >
-              <OwnershipSection
-                squad={viewData.squad}
-                totalPlayers={data.totalPlayers}
-                mode={ownershipMode}
-                leagueId={leagueId}
-                rivalId={rivalId}
-                swapHref={swapHref}
-                overLimitTeamIds={scratch.warnings.overLimitTeamIds}
-              />
-            </Suspense>
-          </>
-        ) : (
-          <FixturesTable
-            view={viewData}
-            swapHref={swapHref}
-            overLimitTeamIds={scratch.warnings.overLimitTeamIds}
-          />
-        )}
+              <Suspense
+                key={`${ownershipMode}-${leagueId ?? rivalId ?? 'global'}`}
+                fallback={<OwnershipLoading mode={ownershipMode} />}
+              >
+                <OwnershipSection
+                  squad={viewData.squad}
+                  totalPlayers={data.totalPlayers}
+                  mode={ownershipMode}
+                  leagueId={leagueId}
+                  rivalId={rivalId}
+                  swapHref={swapHref}
+                  overLimitTeamIds={scratch.warnings.overLimitTeamIds}
+                  populationHref={populationHref}
+                />
+              </Suspense>
+            </>
+          ) : (
+            <FixturesTable
+              view={viewData}
+              swapHref={swapHref}
+              overLimitTeamIds={scratch.warnings.overLimitTeamIds}
+            />
+          )}
 
-        {/* The legend explains fixture shading and the Fixture Score, neither
+          {/* The legend explains fixture shading and the Fixture Score, neither
             of which the Form view shows. */}
-        {usesHorizon(view) && <FixturesLegend rating={rating} />}
-        {view === 'form' && <FormLegend />}
-      </section>
+          {usesHorizon(view) && <FixturesLegend rating={rating} />}
+          {view === 'form' && <FormLegend />}
+        </section>
+      </div>
     </div>
   )
 }
@@ -622,16 +667,18 @@ async function ReplacementSection({
   }))
 
   return (
-    <ReplacementPanel
-      outgoingName={outgoing.name}
-      outgoingClub={outgoing.club}
-      outgoingPrice={outgoing.price}
-      position={outgoing.position}
-      rankingLabel={ranking.label}
-      available={scratch.budget.available}
-      replacements={replacements}
-      closeHref={closeHref}
-    />
+    <Overlay closeHref={closeHref} label={`Replace ${outgoing.name}`}>
+      <ReplacementPanel
+        outgoingName={outgoing.name}
+        outgoingClub={outgoing.club}
+        outgoingPrice={outgoing.price}
+        position={outgoing.position}
+        rankingLabel={ranking.label}
+        available={scratch.budget.available}
+        replacements={replacements}
+        closeHref={closeHref}
+      />
+    </Overlay>
   )
 }
 
@@ -657,6 +704,7 @@ async function ViewAsSection({
   horizon,
   sort,
   carry,
+  panel,
 }: {
   managerId: string
   myId: number
@@ -667,6 +715,8 @@ async function ViewAsSection({
   horizon: Horizon
   sort: string | null
   carry: CarriedState
+  /** Which overlay is open, so narrowing a choice does not close it. */
+  panel: 'menu' | 'population' | null
 }) {
   let leagues: Squad['manager']['leagues'] = []
   try {
@@ -700,6 +750,7 @@ async function ViewAsSection({
       horizon={horizon}
       sort={sort}
       carry={carry}
+      panel={panel}
     />
   )
 }
@@ -735,6 +786,7 @@ async function ModeSelectorSection({
   horizon,
   sort,
   carry,
+  closeHref,
 }: {
   managerId: string
   manager: Squad['manager']
@@ -744,6 +796,7 @@ async function ModeSelectorSection({
   horizon: Horizon
   sort: ClubSort
   carry: CarriedState
+  closeHref: string
 }) {
   let members: LeagueMember[] | null = null
   if (leagueId !== null) {
@@ -765,6 +818,7 @@ async function ModeSelectorSection({
       sort={sort}
       members={members}
       carry={carry}
+      closeHref={closeHref}
     />
   )
 }
@@ -784,6 +838,7 @@ async function OwnershipSection({
   rivalId,
   swapHref,
   overLimitTeamIds,
+  populationHref,
 }: {
   squad: Squad
   totalPlayers: number
@@ -792,19 +847,53 @@ async function OwnershipSection({
   rivalId: number | null
   swapHref: (playerId: number) => string
   overLimitTeamIds: Set<number>
+  populationHref: string
 }) {
   const players = [...squad.startingXi, ...squad.bench]
 
   let reference: ReferencePopulation
+  let league: ReferencePopulation | null = null
+  let rival: ReferencePopulation | null = null
   try {
-    reference = await buildPopulation({
-      mode,
-      players,
-      squad,
-      totalPlayers,
-      leagueId,
-      rivalId,
-    })
+    // A rival is picked out of a league and the league column stays beside
+    // them (section 7.4), so both are built when both are selected. The league
+    // fan-out is cached, and in rival mode it is usually already warm from
+    // having chosen the rival there.
+    const built = await Promise.all([
+      leagueId === null
+        ? null
+        : buildPopulation({
+            mode: 'league',
+            players,
+            squad,
+            totalPlayers,
+            leagueId,
+            rivalId: null,
+          }),
+      rivalId === null
+        ? null
+        : buildPopulation({
+            mode: 'rival',
+            players,
+            squad,
+            totalPlayers,
+            leagueId: null,
+            rivalId,
+          }),
+    ])
+    league = built[0]
+    rival = built[1]
+    reference =
+      rival ??
+      league ??
+      (await buildPopulation({
+        mode: 'global',
+        players,
+        squad,
+        totalPlayers,
+        leagueId: null,
+        rivalId: null,
+      }))
   } catch (error) {
     const fplError =
       error instanceof FplApiError
@@ -822,13 +911,28 @@ async function OwnershipSection({
     return <ErrorNotice kind={fplError.kind} message={fplError.message} />
   }
 
+  // `compareOwnership` is still the one function section 7.4 asks for: called
+  // once per population, and never asking which one it has.
+  const active = compareOwnership(players, reference)
+  const leagueRows = league ? compareOwnership(players, league) : null
+  const rivalRows = rival ? compareOwnership(players, rival) : null
+
   return (
     <OwnershipTable
-      rows={compareOwnership(players, reference)}
+      rows={active.map((row, index) => ({
+        player: row.player,
+        globalPercent: row.globalPercent,
+        leaguePercent: leagueRows ? leagueRows[index].referencePercent : null,
+        rivalOwns: rivalRows ? rivalRows[index].referencePercent > 0 : null,
+        difference: mode === 'global' ? null : row.difference,
+      }))}
       reference={reference}
       teamName={squad.manager.teamName}
+      leagueLabel={league?.label ?? null}
+      rivalLabel={rival?.label ?? null}
       swapHref={swapHref}
       overLimitTeamIds={overLimitTeamIds}
+      populationHref={populationHref}
     />
   )
 }

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
 import {
   MATRIX_HEADER_HEIGHT,
@@ -13,76 +15,111 @@ import {
   type FieldPosition,
   type OwnershipBandId,
 } from '@/lib/fpl/ownership'
-import type { OwnershipRow, ReferencePopulation } from '@/lib/fpl/reference'
+import type { ReferencePopulation } from '@/lib/fpl/reference'
+import type { SquadPlayer } from '@/lib/fpl/squad'
 
 /**
  * View 3, Ownership (section 7.4).
  *
  * "Is this player worth owning, given who else owns them and where I sit?"
  *
- * The rows come from `compareOwnership`, which is the same function for all
- * three populations. This renders them; it does not know how the population
- * was built, only how big it is and what it is called.
+ * ## Columns follow the comparison, and the first column never moves
  *
- * ## The columns are fixed, not per mode
+ * The player column is the shared width from `table-metrics`, identical to
+ * Fixtures and Form, so switching view leaves it exactly where it was.
  *
- * Player, Global, League, Rival, Diff, Flag — always all six, in that order,
- * whichever population is selected. Only the cells that the selected mode can
- * fill carry a value; the rest are em dashes. Rendering three different column
- * sets meant the table reflowed on every mode switch, which made comparing two
- * populations a matter of re-finding the columns each time. A dash is also an
- * honest answer: it says this mode does not measure that, which is different
- * from measuring it as zero.
+ * The comparison columns are the ones that change, and they change by
+ * appearing rather than by filling with dashes:
+ *
+ * | Mode   | Columns |
+ * |--------|---------|
+ * | global | Global, Flag |
+ * | league | Global, League, Diff, Flag |
+ * | rival  | Global, League, Rival, Diff, Flag |
+ *
+ * An earlier version kept all six always and dashed the unused ones, to stop
+ * the table reflowing. That traded a reflow for four dead columns on the view
+ * most people open first. Now that the player column is pinned by the shared
+ * width, the part that must not move does not, and the rest is free to say
+ * only what it has.
+ *
+ * **League stays visible in rival mode.** A rival is picked out of a league,
+ * and "they own him, and so does half the league" is a different fact from
+ * "they own him and nobody else does".
  *
  * ## The flag colour is relative to your position, not to the band
  *
  * The label carries the band and never changes. The colour carries whether
  * being in that band helps or hurts you *right now*, and reverses with the
- * direction flag. Section 7.4: ahead of the population a differential is a
- * risk and convergence protects the lead; behind, the reverse. So the same
- * Template chip is the best thing on the table when you are ahead and the
- * worst when you are behind.
+ * direction flag: ahead of the population a differential is a risk and
+ * convergence protects the lead; behind, the reverse. So the same Template
+ * chip is the best thing on the table when you are ahead and the worst when
+ * you are behind.
  *
- * This is why the scale is diverging green-to-red with no amber in the middle:
- * the split between helping and hurting is the whole message and has to be
- * visible without reading a word. Two greens and two reds, never a gradient
- * through neutral.
- *
- * With no rank to read against there is no direction, so the chips stay grey.
- * Colouring them anyway would be inventing advice.
+ * Diverging green-to-red with no amber: the split between helping and hurting
+ * is the whole message and has to be visible without reading a word. With no
+ * rank to read against there is no direction, so the chips stay grey rather
+ * than inventing advice.
  */
 
 const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
-/** The one wide column: it carries a bar as well as a number. */
-const GLOBAL_COLUMN = 'w-40 min-w-40'
+/** The bar columns. Wide, because there the space is the data. */
+const PERCENT_COLUMN = 'w-56 min-w-56'
 const NUMERIC_COLUMN = 'w-20 min-w-20'
 const BAND_COLUMN = 'w-32 min-w-32'
 
-/** Player, Global, League, Rival, Diff, Flag, plus the trailing spacer. */
-const COLUMN_COUNT = 7
+/**
+ * One row's figures, gathered across up to three populations.
+ *
+ * `leaguePercent` and `rivalOwns` are null when that population is not
+ * selected, which is also when its column is absent.
+ */
+export type OwnershipView = {
+  player: SquadPlayer
+  globalPercent: number
+  leaguePercent: number | null
+  rivalOwns: boolean | null
+  /** The active population's ownership minus global. */
+  difference: number | null
+}
 
 export function OwnershipTable({
   rows,
   reference,
   teamName,
+  leagueLabel,
+  rivalLabel,
   swapHref,
   overLimitTeamIds,
+  populationHref,
 }: {
-  rows: OwnershipRow[]
+  rows: OwnershipView[]
   reference: ReferencePopulation
   teamName: string
-  /** Opens the replacement panel for a player (section 7.7). Null disables it. */
+  /** Non-null when a league is selected, which is when its column shows. */
+  leagueLabel: string | null
+  rivalLabel: string | null
   swapHref: ((playerId: number) => string) | null
-  /** Clubs over the three-per-club limit, for the row accent (section 7.7). */
   overLimitTeamIds: Set<number>
+  /** Opens the population picker (section 7.8). */
+  populationHref: string
 }) {
   const startingXi = rows.filter((row) => row.player.squadPosition <= 11)
   const bench = rows.filter((row) => row.player.squadPosition > 11)
   const position = reference.standing.position
 
+  const showLeague = leagueLabel !== null
+  const showRival = rivalLabel !== null
+  const showDifference = showLeague || showRival
+  const columnCount =
+    3 + (showLeague ? 1 : 0) + (showRival ? 1 : 0) + (showDifference ? 1 : 0)
+
   return (
     <div className="space-y-4">
-      <DirectionFlag reference={reference} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <DirectionFlag reference={reference} />
+        <PopulationButton href={populationHref} label={reference.label} />
+      </div>
 
       {reference.notice && (
         <p
@@ -99,8 +136,7 @@ export function OwnershipTable({
       <div className="relative overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <caption className="sr-only">
-            {teamName}: how widely each of the fifteen players is owned, across
-            all FPL managers and within {reference.label}.
+            {teamName}: how widely each of the fifteen players is owned.
           </caption>
 
           <thead>
@@ -112,45 +148,41 @@ export function OwnershipTable({
                 Player
               </HeaderCell>
               <HeaderCell
-                className={GLOBAL_COLUMN}
+                className={PERCENT_COLUMN}
                 align="left"
                 title="Percentage of all FPL managers who own this player"
               >
                 Global
               </HeaderCell>
-              <HeaderCell
-                className={NUMERIC_COLUMN}
-                title={
-                  reference.mode === 'league'
-                    ? `Ownership within ${reference.label}`
-                    : 'Ownership within the selected league. Select a league to fill this column'
-                }
-              >
-                League
-              </HeaderCell>
-              <HeaderCell
-                className={NUMERIC_COLUMN}
-                title={
-                  reference.mode === 'rival'
-                    ? `Whether ${reference.label} owns this player`
-                    : 'Whether the selected rival owns this player. Select a rival to fill this column'
-                }
-              >
-                Rival
-              </HeaderCell>
-              <HeaderCell
-                className={NUMERIC_COLUMN}
-                title="Ownership in the selected population, minus global ownership"
-              >
-                Diff
-              </HeaderCell>
+              {showLeague && (
+                <HeaderCell
+                  className={PERCENT_COLUMN}
+                  align="left"
+                  title={`Ownership within ${leagueLabel}`}
+                >
+                  League
+                </HeaderCell>
+              )}
+              {showRival && (
+                <HeaderCell
+                  className={NUMERIC_COLUMN}
+                  title={`Whether ${rivalLabel} owns this player`}
+                >
+                  Rival
+                </HeaderCell>
+              )}
+              {showDifference && (
+                <HeaderCell
+                  className={NUMERIC_COLUMN}
+                  title="Ownership in the selected population, minus global ownership"
+                >
+                  Diff
+                </HeaderCell>
+              )}
               <HeaderCell className={BAND_COLUMN} align="left">
                 Flag
               </HeaderCell>
 
-              {/* Absorbs the leftover width, as in Fixtures and Form, so the
-                  columns keep the widths set above instead of sharing out the
-                  surplus. */}
               <th
                 aria-hidden
                 className="w-auto border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800"
@@ -163,8 +195,10 @@ export function OwnershipTable({
               <PlayerRow
                 key={row.player.id}
                 row={row}
-                reference={reference}
                 position={position}
+                showLeague={showLeague}
+                showRival={showRival}
+                showDifference={showDifference}
                 swapHref={swapHref}
                 overLimitTeamIds={overLimitTeamIds}
               />
@@ -173,7 +207,7 @@ export function OwnershipTable({
             <tr>
               <th
                 scope="colgroup"
-                colSpan={COLUMN_COUNT}
+                colSpan={columnCount}
                 className="sticky left-0 border-y border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/70 dark:text-neutral-400"
               >
                 Bench
@@ -184,8 +218,10 @@ export function OwnershipTable({
               <PlayerRow
                 key={row.player.id}
                 row={row}
-                reference={reference}
                 position={position}
+                showLeague={showLeague}
+                showRival={showRival}
+                showDifference={showDifference}
                 swapHref={swapHref}
                 overLimitTeamIds={overLimitTeamIds}
               />
@@ -196,6 +232,33 @@ export function OwnershipTable({
 
       <BandKey position={position} />
     </div>
+  )
+}
+
+/**
+ * The way into the population picker (section 7.8).
+ *
+ * The picker used to be a bordered card of links and two ID forms sitting
+ * permanently above the table, which was the untidiest thing on the page and
+ * pushed the table down on the one view where the table *is* the comparison.
+ * It floats now, and this button names what is currently selected so the state
+ * stays legible with the panel shut.
+ */
+function PopulationButton({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      className="inline-flex shrink-0 items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+    >
+      <span className="text-neutral-500 dark:text-neutral-400">
+        Compare against
+      </span>
+      <span className="max-w-[14rem] truncate font-semibold">{label}</span>
+      <span aria-hidden className="text-[10px]">
+        &#9662;
+      </span>
+    </Link>
   )
 }
 
@@ -225,26 +288,37 @@ function HeaderCell({
 
 function PlayerRow({
   row,
-  reference,
   position,
+  showLeague,
+  showRival,
+  showDifference,
   swapHref,
   overLimitTeamIds,
 }: {
-  row: OwnershipRow
-  reference: ReferencePopulation
+  row: OwnershipView
   position: FieldPosition
+  showLeague: boolean
+  showRival: boolean
+  showDifference: boolean
   swapHref: ((playerId: number) => string) | null
   overLimitTeamIds: Set<number>
 }) {
   const band = ownershipBandOf(row.globalPercent)
   const isBench = row.player.squadPosition > 11
 
-  const rowBackground = isBench
-    ? 'bg-neutral-50 dark:bg-neutral-900/60'
-    : 'bg-white dark:bg-neutral-900'
+  // In rival mode the question is "which of mine do they also have", and that
+  // is a property of the whole row rather than of one cell. Lifting it to the
+  // row means the answer is visible while scanning names, without reading
+  // across to a column of yes and no.
+  const rivalMisses = showRival && row.rivalOwns === false
 
-  const isLeague = reference.mode === 'league'
-  const isRival = reference.mode === 'rival'
+  const rowBackground = rivalMisses
+    ? 'bg-neutral-100/70 dark:bg-neutral-950/60'
+    : isBench
+      ? 'bg-neutral-50 dark:bg-neutral-900/60'
+      : 'bg-white dark:bg-neutral-900'
+
+  const dim = rivalMisses ? 'opacity-55' : ''
 
   return (
     <tr className={MATRIX_ROW_HEIGHT}>
@@ -252,7 +326,7 @@ function PlayerRow({
         scope="row"
         className={`sticky left-0 z-10 border-b border-r border-neutral-200 px-3 py-1.5 text-left font-normal dark:border-neutral-800 ${rowBackground} ${PLAYER_COLUMN} ${overLimitAccent(row.player.teamId, overLimitTeamIds)}`}
       >
-        <span className="flex items-baseline gap-1.5">
+        <span className={`flex items-baseline gap-1.5 ${dim}`}>
           <PlayerName
             name={row.player.name}
             href={swapHref === null ? null : swapHref(row.player.id)}
@@ -264,47 +338,60 @@ function PlayerRow({
       </th>
 
       <td
-        className={`border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${GLOBAL_COLUMN}`}
+        className={`border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${PERCENT_COLUMN}`}
       >
-        <OwnershipBar percent={row.globalPercent} />
+        <span className={dim}>
+          <OwnershipBar percent={row.globalPercent} tone={BAR_TONE.global} />
+        </span>
       </td>
 
-      <DataCell background={rowBackground}>
-        {isLeague ? `${row.referencePercent.toFixed(1)}%` : <NotMeasured />}
-      </DataCell>
+      {showLeague && (
+        <td
+          className={`border-b border-l border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${PERCENT_COLUMN}`}
+        >
+          <span className={dim}>
+            <OwnershipBar
+              percent={row.leaguePercent ?? 0}
+              tone={BAR_TONE.league}
+            />
+          </span>
+        </td>
+      )}
 
-      <DataCell background={rowBackground}>
-        {/* A population of one reads better as a yes or no than as 0% or 100%.
-            The calculation is unchanged; only the wording is. */}
-        {isRival ? (
-          row.referencePercent > 0 ? (
-            <span className="font-medium">Owns</span>
+      {showRival && (
+        <td
+          className={`border-b border-l border-neutral-100 px-2 py-1.5 text-center dark:border-neutral-800/70 ${rowBackground} ${NUMERIC_COLUMN}`}
+        >
+          {row.rivalOwns ? (
+            <span className="inline-flex items-center rounded bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-neutral-100 dark:text-neutral-900">
+              Owns
+            </span>
           ) : (
-            <span className="text-neutral-400 dark:text-neutral-600">No</span>
-          )
-        ) : (
-          <NotMeasured />
-        )}
-      </DataCell>
+            <span className="text-xs text-neutral-400 dark:text-neutral-600">
+              &mdash;
+            </span>
+          )}
+        </td>
+      )}
 
-      <DataCell background={rowBackground}>
-        {/* Global mode compares the population against itself, so the
-            difference would be a column of zeroes rather than a measurement.
-            See 7.4.1. */}
-        {isLeague || isRival ? (
-          <Difference value={row.difference} />
-        ) : (
-          <NotMeasured />
-        )}
-      </DataCell>
+      {showDifference && (
+        <td
+          className={`border-b border-l border-neutral-100 px-2 py-1.5 text-center tabular-nums dark:border-neutral-800/70 ${rowBackground} ${NUMERIC_COLUMN}`}
+        >
+          <span className={dim}>
+            <Difference value={row.difference} />
+          </span>
+        </td>
+      )}
 
       <td
         className={`border-b border-l border-neutral-100 px-3 py-1.5 dark:border-neutral-800/70 ${rowBackground} ${BAND_COLUMN}`}
       >
-        <BandChip id={band.id} label={band.label} position={position} />
+        <span className={dim}>
+          <BandChip id={band.id} label={band.label} position={position} />
+        </span>
       </td>
 
-      {/* Matches the spacer in the header. */}
       <td
         aria-hidden
         className={`w-auto border-b border-l border-neutral-100 dark:border-neutral-800/70 ${rowBackground}`}
@@ -313,36 +400,16 @@ function PlayerRow({
   )
 }
 
-function DataCell({
-  children,
-  background,
-}: {
-  children: React.ReactNode
-  background: string
-}) {
-  return (
-    <td
-      className={`border-b border-l border-neutral-100 px-2 py-1.5 text-center tabular-nums text-neutral-800 dark:border-neutral-800/70 dark:text-neutral-200 ${background} ${NUMERIC_COLUMN}`}
-    >
-      {children}
-    </td>
-  )
-}
-
 /**
- * A column this mode does not measure.
- *
- * Deliberately not a zero: "no rival selected" and "the rival does not own
- * them" are different answers and must not look alike.
+ * One hue per bar column, chosen for contrast rather than prettiness: the two
+ * percentage columns sit side by side and the whole point is telling them
+ * apart at a glance. Neither implies good or bad — that is the Flag column's
+ * job, and it reverses with the direction flag.
  */
-function NotMeasured() {
-  return (
-    <span className="text-neutral-300 dark:text-neutral-600">
-      <span aria-hidden>—</span>
-      <span className="sr-only">not measured in this mode</span>
-    </span>
-  )
-}
+const BAR_TONE = {
+  global: 'bg-slate-400/60 dark:bg-slate-400/40',
+  league: 'bg-violet-400/60 dark:bg-violet-500/45',
+} as const
 
 /**
  * Reference minus global.
@@ -351,12 +418,12 @@ function NotMeasured() {
  * whether leaning that way is good depends entirely on the direction flag,
  * which the Flag column already carries.
  */
-function Difference({ value }: { value: number }) {
-  const rounded = Math.round(value * 10) / 10
-  if (rounded === 0) {
+function Difference({ value }: { value: number | null }) {
+  const rounded = value === null ? 0 : Math.round(value * 10) / 10
+  if (value === null || rounded === 0) {
     return (
       <span className="text-neutral-300 dark:text-neutral-600">
-        <span aria-hidden>—</span>
+        <span aria-hidden>&mdash;</span>
         <span className="sr-only">no difference</span>
       </span>
     )
@@ -376,18 +443,18 @@ function Difference({ value }: { value: number }) {
  * to 100, not to the highest value in the squad, so the same player looks the
  * same in any squad and the reader is not misled by a relative scale.
  */
-function OwnershipBar({ percent }: { percent: number }) {
+function OwnershipBar({ percent, tone }: { percent: number; tone: string }) {
   return (
     <span className="flex items-center gap-2">
-      <span className="w-12 shrink-0 text-right tabular-nums font-medium text-neutral-900 dark:text-neutral-100">
+      <span className="w-12 shrink-0 text-right font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
         {percent.toFixed(1)}%
       </span>
       <span
         aria-hidden
-        className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800"
+        className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800"
       >
         <span
-          className="block h-full rounded-full bg-neutral-400 dark:bg-neutral-500"
+          className={`block h-full rounded-full ${tone}`}
           style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
         />
       </span>
@@ -401,8 +468,6 @@ function OwnershipBar({ percent }: { percent: number }) {
  * Two greens and two reds, no amber: an amber middle would read as "neutral",
  * and there is no neutral here. Every band either helps or hurts the position
  * you are in, and the step from `good` to `weak` is the line between the two.
- * Keeping the pale pair adjacent makes that line the strongest edge in the
- * column, which is what has to be legible without reading the labels.
  */
 const STEP_STYLE: Record<BandStrategyStep, string> = {
   best: 'bg-emerald-200 text-emerald-950 dark:bg-emerald-500/35 dark:text-emerald-50',
@@ -447,14 +512,12 @@ function BandChip({
   )
 }
 
-/**
- * Section 7.4's direction flag: one line, above the table, never per player.
- */
+/** Section 7.4's direction flag: one line, above the table, never per player. */
 function DirectionFlag({ reference }: { reference: ReferencePopulation }) {
   const { standing } = reference
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="text-sm text-neutral-700 dark:text-neutral-300">
         {standing.guidance}
       </p>
@@ -478,9 +541,8 @@ function describePopulation(reference: ReferencePopulation): string {
     return `Compared against ${reference.label}.`
   }
 
-  // A null rank means the manager is not among the compared managers. That
-  // covers both a league they are not in and, on a big league, one they are in
-  // but rank outside the top 50 of. Wording that fits both.
+  // A null rank means the manager is not among the compared managers: either a
+  // league they are not in, or one they are in but rank outside the top 50 of.
   const where =
     standing.rank === null
       ? 'You are outside the compared group'
@@ -517,7 +579,10 @@ function BandKey({ position }: { position: FieldPosition }) {
                 <span className="tabular-nums">
                   {upper === null ? `${band.min}%+` : `${band.min}–${upper}%`}
                 </span>
-                <span className="hidden lg:inline"> · {band.description}</span>
+                <span className="hidden lg:inline">
+                  {' '}
+                  &middot; {band.description}
+                </span>
               </dd>
             </div>
           )

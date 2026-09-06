@@ -138,6 +138,20 @@ export type FixtureRating = {
   score: RatingFn
   /** Team Strength per club on a 0 to 10 scale. Always this app's figure. */
   teamStrength: Map<number, number>
+  /**
+   * Completed matches per club this season.
+   *
+   * Counted from `fixtures/`, so it is right through blanks and doubles: a
+   * club that has played a double gameweek has two matches from it, and one
+   * that blanked has none. The `teams` array's own `played` is never
+   * populated, so it cannot be used.
+   *
+   * **Started, not finished.** The Form view divides minutes by this (section
+   * 7.3), and minutes accrue the moment a match kicks off. Counting only
+   * completed matches would divide three matches' minutes by two while a
+   * gameweek is in progress, and report 135 minutes per match.
+   */
+  matchesPlayed: Map<number, number>
 }
 
 /** What the model worked out about one club, for the legend and for testing. */
@@ -179,6 +193,28 @@ export type DerivedRating = {
   leagueMeanPpg: number
 }
 
+/**
+ * Matches each club has kicked off, whether or not they have finished.
+ *
+ * The denominator for average minutes, which is a different question from the
+ * one the rating asks: the rating wants results, and a match in progress has
+ * none, but a player is accruing minutes in it right now.
+ */
+function matchesStarted(
+  fixtures: FplFixture[],
+  teams: FplTeam[]
+): Map<number, number> {
+  const counts = new Map<number, number>(teams.map((team) => [team.id, 0]))
+  for (const fixture of fixtures) {
+    if (!fixture.started) {
+      continue
+    }
+    counts.set(fixture.team_h, (counts.get(fixture.team_h) ?? 0) + 1)
+    counts.set(fixture.team_a, (counts.get(fixture.team_a) ?? 0) + 1)
+  }
+  return counts
+}
+
 /** FPL's own pre-season figures, straight off the fixture. */
 export const fplRating: RatingFn = (fixture, forHome) =>
   forHome ? fixture.team_h_difficulty : fixture.team_a_difficulty
@@ -192,18 +228,19 @@ export function buildRating(
   const teamStrength = new Map(
     derived.clubs.map((club) => [club.teamId, club.teamStrength])
   )
+  const matchesPlayed = matchesStarted(fixtures, teams)
 
   const plain = venueAdjusted(derived, 'plain')
   const blended = venueAdjusted(derived, 'blend')
 
   if (source === 'fpl') {
-    return { colour: fplRating, score: fplRating, teamStrength }
+    return { colour: fplRating, score: fplRating, teamStrength, matchesPlayed }
   }
   if (source === 'blend') {
     // The one asymmetric case, and the reason this type has two fields.
-    return { colour: blended, score: plain, teamStrength }
+    return { colour: blended, score: plain, teamStrength, matchesPlayed }
   }
-  return { colour: plain, score: plain, teamStrength }
+  return { colour: plain, score: plain, teamStrength, matchesPlayed }
 }
 
 /**

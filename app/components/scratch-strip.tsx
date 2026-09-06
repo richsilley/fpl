@@ -8,11 +8,12 @@ import { formatPrice } from '@/lib/format'
  *
  * ## Always on screen
  *
- * Section 7.7 asks for a persistent strip that is not scrolled away, so this
- * is sticky at the top of the page. Over budget and a fourth player from one
- * club are both conditions you can create three swaps ago and only discover
- * when you try to make the transfers for real; the whole value of the warning
- * is that it is still there when you have stopped looking for it.
+ * Section 7.7 asks for a persistent strip that is not scrolled away. It rides
+ * in the sticky bar under the header rather than positioning itself, so the
+ * two can never overlap. Over budget and a fourth player from one club are
+ * both conditions you can create three swaps ago and only discover when you
+ * try to make the transfers for real; the whole value of the warning is that
+ * it is still there when you have stopped looking for it.
  *
  * ## Warnings never block
  *
@@ -45,7 +46,7 @@ export function ScratchStrip({
 
   return (
     <div
-      className={`sticky top-0 z-30 -mx-4 mb-4 border-b px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 ${
+      className={`border-b px-5 py-3 backdrop-blur sm:px-8 lg:px-12 ${
         problems
           ? 'border-rose-300 bg-rose-50/95 dark:border-rose-900 dark:bg-rose-950/80'
           : 'border-neutral-200 bg-white/95 dark:border-neutral-800 dark:bg-neutral-900/90'

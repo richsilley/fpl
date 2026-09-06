@@ -34,7 +34,10 @@ import type { FplBootstrap, FplElement } from './types'
 
 export type Replacement = {
   id: number
+  /** Display name, e.g. "Saka". */
   name: string
+  /** First and last name, which is what the panel shows (section 7.7). */
+  fullName: string
   club: string
   clubName: string
   teamId: number
@@ -156,6 +159,9 @@ export function buildReplacements({
         row: {
           id: element.id,
           name: element.web_name,
+          fullName:
+            `${element.first_name} ${element.second_name}`.trim() ||
+            element.web_name,
           club: club?.short_name ?? '?',
           clubName: club?.name ?? 'Unknown club',
           teamId: element.team,

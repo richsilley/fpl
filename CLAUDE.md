@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.17; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.19; v1 feature complete).
 
 ## What this is
 
@@ -23,8 +23,14 @@ projection.
 - No database in v1; caching does the work instead
 - Mobile is the primary target: frozen first column + horizontal scroll on every view
 
-Caching: `bootstrap-static` 1h, `fixtures` 24h, a manager's `picks` rest of
+Caching: `bootstrap-static` 1h, `fixtures` **1h**, a manager's `picks` rest of
 gameweek (immutable once deadline passes), league standings 1h.
+
+**`fixtures` is 1h, not the 24h §8.3 originally specified.** The fixture list
+changes rarely but the same payload carries `started`/`finished`/scores, and
+two features divide bootstrap figures by fixture figures (§6.7 rating, §7.3
+average minutes). At 24h they disagreed mid-gameweek and Mins read 135 per
+match. **Any two figures divided by each other need payloads of the same age.**
 
 ## API routes (built)
 
@@ -34,7 +40,7 @@ wrappers over it. Cache durations live in `lib/fpl/config.ts`.
 | Route | Cache |
 |---|---|
 | `GET /api/bootstrap` | 1h |
-| `GET /api/fixtures` | 24h |
+| `GET /api/fixtures` | 1h |
 | `GET /api/picks/{managerId}?gw=` | until next deadline; `gw` defaults to current |
 | `GET /api/league/{leagueId}?page=` | 1h; page 1 = top 50 |
 
@@ -166,6 +172,33 @@ rendering a scratch squad**.
   `populationDirection` gets from one cached call rather than waiting on the
   fifty-squad fan-out.
 
+## App shell (§7.8)
+
+**The app is four views over one squad; everything else is chrome.** Load-squad
+and view-as live in a **menu drawer**, not on the page. The four views are
+segmented buttons at full width — the loudest thing below the header.
+
+- **Header is sticky at every width** and carries the menu button. The scratch
+  strip rides in the *same* sticky container (`page.tsx`), so they cannot
+  overlap — neither positions itself.
+- On a phone the six stat tiles collapse to one line of text; sticky tiles
+  would eat a third of the screen.
+- **Viewing as → the whole header turns amber and holds "Back to my team".**
+  The picker in the menu deliberately has no second copy of that button.
+- **Overlays float over a backdrop; they never push the page down.** Menu,
+  Ownership population picker, replacement panel. All three are **URL state**
+  (`panel=menu`, `panel=population`, `swap=<id>`) — opening is a link, the
+  backdrop is a link, so click-away dismissal is free and needs no JS. Unlike
+  `out`/`in`, `panel` and `swap` are **not** carried between views.
+- **Narrowing a choice keeps an overlay open; answering it closes.** Picking a
+  league carries `panel` through (it produces the list to read next); picking a
+  team or a rival does not. Same rule in the drawer and the population picker.
+- **One gutter for the whole page.** The sticky bars bleed to the window edge
+  but pad back to the same gutter, and bars and content share `max-w-[1600px]`
+  centred. Menu button, tabs and every table start on the same line. Change the
+  padding in one place and you must change it in all three (`page.tsx`,
+  `squad-header`, `scratch-strip`) or they drift apart.
+
 ## URL state (§8.2) — read this before adding a control
 
 All params in `lib/fpl/params.ts`. **Every control is a link or a GET form, and
@@ -187,7 +220,9 @@ rendered, `asleague` is the league its picker is listing. **`id` always stays
 the user's own team** — that is what makes "Back to my team" one link, and what
 keeps the league list theirs rather than the borrowed manager's.
 
-`rating` picks the fixture difficulty: `fpl` (default) or `custom` (§6.7).
+`rating` picks the fixture difficulty: `fpl` (default), `form` or `blend`
+(§6.7), labelled **View** with options FDR (FPL) / FDR (Form) / FDR × Strength.
+`panel` opens an overlay: `menu` or `population` (§7.8).
 
 **Pass-through params travel as one `CarriedState` object**, not five props.
 Threading them individually failed silently: a forgotten prop loses one
@@ -308,7 +343,18 @@ Rows are the 15 players except where noted.
    Headers are centred except Player; data is centred except Player and the bar
    columns, whose numbers stay right-aligned against the end of their own bar.
 
-   **`xP (FPL)` is FPL's `ep_next`, not ours** — the header says whose it is
+   **Availability is a column**, second and frozen, exactly where Fixtures
+   puts Fixture Score and the same width — that is what makes the two tables
+   line up. Drawn as a bar, and **available is a faint grey rule, not green**:
+   in a normal week all fifteen are fit and a column of green would shout the
+   least useful thing on the table.
+
+   **Mins is per match**, divided by that club's **started** fixtures from
+   `fixtures/` (blanks and doubles handled; `teams.played` is never
+   populated). Both figures must come from payloads of the same age — see the
+   `fixtures` cache note.
+
+   **`xP` is FPL's `ep_next`, not ours** — the header says whose it is
    because a number in our table reads as our number. Far right, ruled off, and
    **no bar on purpose**: it summarises the columns to its left, so a bar would
    set it competing with its own inputs. `FormLegend` carries the disclaimer.

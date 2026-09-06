@@ -40,6 +40,7 @@ export function OwnershipModeSelector({
   sort,
   members,
   carry,
+  closeHref,
 }: {
   managerId: string
   manager: SquadManager
@@ -52,10 +53,18 @@ export function OwnershipModeSelector({
   members: LeagueMember[] | null
   /** View-as target, passed through so every link here preserves it. */
   carry: CarriedState
+  /** Dismisses the floating panel this now lives in (section 7.8). */
+  closeHref: string
 }) {
   // `league` and `rival` are what this control sets, so they are left out of
   // the base and written explicitly per link. The view-as target is not, so it
   // rides along untouched.
+  //
+  // Choosing a league keeps the panel open and choosing a rival closes it, on
+  // the same reasoning as the menu drawer (7.8): a league is the question
+  // narrowing and produces the list of managers to read next, while a rival is
+  // the answer and leaves nothing to choose.
+  const staysOpen: AppState['panel'] = 'population'
   const base: AppState = {
     id: managerId,
     view: 'ownership',
@@ -67,15 +76,24 @@ export function OwnershipModeSelector({
   const league = leagueId === null ? undefined : String(leagueId)
 
   return (
-    <div className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+    <div>
+      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+        <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
           Compare against
-        </span>
+        </h3>
+        <Link
+          href={closeHref}
+          scroll={false}
+          className="rounded-md border border-neutral-300 px-2.5 py-1 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+        >
+          Close
+        </Link>
+      </div>
 
+      <div className="space-y-3 p-4">
         <span className="flex flex-wrap items-center gap-1.5">
           <ModeLink
-            href={buildHref(base)}
+            href={buildHref({ ...base, panel: staysOpen })}
             selected={mode === 'global'}
             label="All managers"
           />
@@ -83,44 +101,48 @@ export function OwnershipModeSelector({
           {manager.leagues.map((entry) => (
             <ModeLink
               key={entry.id}
-              href={buildHref({ ...base, league: String(entry.id) })}
+              href={buildHref({
+                ...base,
+                league: String(entry.id),
+                panel: staysOpen,
+              })}
               selected={mode === 'league' && leagueId === entry.id}
               label={entry.name}
               detail={entry.size === null ? undefined : `${entry.size}`}
             />
           ))}
         </span>
-      </div>
 
-      {/* Only meaningful once a league is selected, which is also the only
+        {/* Only meaningful once a league is selected, which is also the only
           time there is a list to build it from. In global mode there is no
           dropdown at all rather than an empty one. */}
-      {members !== null && (
-        <RivalPicker
-          members={members}
-          rivalId={mode === 'rival' ? rivalId : null}
-          base={base}
-          league={league}
-        />
-      )}
+        {members !== null && (
+          <RivalPicker
+            members={members}
+            rivalId={mode === 'rival' ? rivalId : null}
+            base={base}
+            league={league}
+          />
+        )}
 
-      <div className="flex flex-col gap-3 border-t border-neutral-100 pt-3 sm:flex-row sm:gap-6 dark:border-neutral-800/70">
-        <IdForm
-          name="league"
-          label="Another league ID"
-          placeholder="540385"
-          current={mode === 'league' ? leagueId : null}
-          base={base}
-        />
-        <IdForm
-          name="rival"
-          label="Rival manager ID"
-          placeholder="3921581"
-          current={mode === 'rival' ? rivalId : null}
-          // Given the league, so typing a rival from outside it does not throw
-          // away the league the dropdown is built from.
-          base={{ ...base, league }}
-        />
+        <div className="flex flex-col gap-3 border-t border-neutral-100 pt-3 sm:flex-row sm:gap-6 dark:border-neutral-800/70">
+          <IdForm
+            name="league"
+            label="Another league ID"
+            placeholder="540385"
+            current={mode === 'league' ? leagueId : null}
+            base={{ ...base, panel: staysOpen }}
+          />
+          <IdForm
+            name="rival"
+            label="Rival manager ID"
+            placeholder="3921581"
+            current={mode === 'rival' ? rivalId : null}
+            // Given the league, so typing a rival from outside it does not throw
+            // away the league the dropdown is built from.
+            base={{ ...base, league }}
+          />
+        </div>
       </div>
     </div>
   )

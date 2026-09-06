@@ -77,6 +77,7 @@ export function buildFixtureIndex(
     colour: fplRating,
     score: fplRating,
     teamStrength: new Map(),
+    matchesPlayed: new Map(),
   }
 ): FixtureIndex {
   const clubsById = new Map(teams.map((team) => [team.id, team]))

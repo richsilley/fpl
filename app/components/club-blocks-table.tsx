@@ -127,11 +127,6 @@ export function ClubBlocksTable({
               title="How strong this club is right now, on the same 0 to 10 scale as Fixture Score. Always this app's figure — FPL publishes no form-aware strength, so this column does not change with the difficulty toggle"
             >
               Team Strength
-              {/* Named so it is not read as an FPL figure while the toggle
-                  says FPL. */}
-              <span className="ml-1 font-normal text-neutral-400 dark:text-neutral-500">
-                (ours)
-              </span>
             </SortableHeader>
 
             <SortableHeader

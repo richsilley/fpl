@@ -7,7 +7,7 @@ import type { Replacement } from '@/lib/fpl/replacements'
 import { formatPrice } from '@/lib/format'
 
 /**
- * The replacement picker (section 7.7).
+ * The replacement picker (section 7.7), floating over the page (7.8).
  *
  * ## Why this one is a Client Component
  *
@@ -21,6 +21,16 @@ import { formatPrice } from '@/lib/format'
  * built on the server, so the swap itself needs no JavaScript. Without JS the
  * search box and the toggle are simply absent and the full ranked list works
  * exactly as it reads.
+ *
+ * ## The row is a table, not a sentence
+ *
+ * Name, club, price and the cost of the move each get their own column, at a
+ * fixed width, so they line up down the list and can be compared by running
+ * the eye straight down. They used to sit at the two far ends of a very wide
+ * panel, which put the price a whole screen away from the name it belonged to.
+ * The flags — over budget, fourth from a club — go on a second line under the
+ * name, because they are occasional and would otherwise reserve width that is
+ * usually empty.
  *
  * ## Nothing is filtered out
  *
@@ -68,7 +78,7 @@ export function ReplacementPanel({
   }, [replacements, query, affordableOnly])
 
   return (
-    <div className="rounded-lg border border-neutral-300 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+    <div className="flex max-h-[calc(100vh-3rem)] flex-col">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
@@ -105,7 +115,7 @@ export function ReplacementPanel({
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search player or club…"
           autoComplete="off"
-          className="w-full min-w-0 rounded-md border border-neutral-300 sm:flex-1 px-2.5 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500/30 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-600"
+          className="w-full min-w-0 rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500/30 sm:flex-1 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-600"
         />
         <label className="flex shrink-0 items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
           <input
@@ -114,18 +124,29 @@ export function ReplacementPanel({
             onChange={(event) => setAffordableOnly(event.target.checked)}
             className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-600"
           />
-          Only show what I can afford
+          Only what I can afford
         </label>
+        <span
+          aria-live="polite"
+          className="shrink-0 text-xs tabular-nums text-neutral-500 dark:text-neutral-400"
+        >
+          {shown.length} of {replacements.length}
+        </span>
       </div>
 
-      <p
-        aria-live="polite"
-        className="px-3 pt-2 text-xs text-neutral-500 dark:text-neutral-400"
-      >
-        {shown.length} of {replacements.length}
-      </p>
+      {/* The column heads for the rows below, so the fixed widths read as
+          columns rather than as coincidence. */}
+      <div className="flex items-center gap-3 border-b border-neutral-200 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+        <span className="min-w-0 flex-1">Player</span>
+        <span className="w-16 shrink-0 text-right">Price</span>
+        <span className="w-16 shrink-0 text-right">Change</span>
+        <span className="hidden w-40 shrink-0 text-right sm:block">
+          Ranked by
+        </span>
+        <span className="w-12 shrink-0 text-right">xP</span>
+      </div>
 
-      <ul className="max-h-[26rem] divide-y divide-neutral-100 overflow-y-auto dark:divide-neutral-800">
+      <ul className="divide-y divide-neutral-100 overflow-y-auto dark:divide-neutral-800">
         {shown.map((row) => (
           <li key={row.id}>
             {/* Already in the squad, so listed and flagged but not selectable.
@@ -135,34 +156,44 @@ export function ReplacementPanel({
                 duplicate player is one FPL has no concept of, and taking it
                 would silently leave you with fourteen. */}
             <RowShell href={row.alreadyOwned ? null : row.href}>
-              <span className="min-w-0">
-                <span className="flex flex-wrap items-baseline gap-x-1.5">
+              <span className="min-w-0 flex-1">
+                {/* The club reads as part of the name, which is how anyone
+                    would say it out loud, and a column of three-letter codes
+                    was width spent on the least distinguishing thing. */}
+                <span className="block truncate">
                   <span className="font-medium text-neutral-900 dark:text-neutral-100">
-                    {row.name}
-                  </span>
+                    {row.fullName}
+                  </span>{' '}
                   <span className="text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
                     {row.club}
                   </span>
-                  {row.alreadyOwned && <Flag tone="neutral">in squad</Flag>}
-                  {row.breachesClubLimit && (
-                    <Flag tone="warn">4th {row.club}</Flag>
-                  )}
-                  {!row.affordable && <Flag tone="warn">over budget</Flag>}
                 </span>
-                <span className="mt-0.5 block text-xs text-neutral-500 dark:text-neutral-400">
-                  {row.rankValue} · {row.expectedPointsNext.toFixed(1)} xP (FPL)
-                </span>
+                {(row.alreadyOwned ||
+                  row.breachesClubLimit ||
+                  !row.affordable) && (
+                  <span className="mt-0.5 flex flex-wrap gap-1">
+                    {row.alreadyOwned && <Flag tone="neutral">in squad</Flag>}
+                    {row.breachesClubLimit && (
+                      <Flag tone="warn">4th {row.club}</Flag>
+                    )}
+                    {!row.affordable && <Flag tone="warn">over budget</Flag>}
+                  </span>
+                )}
               </span>
 
-              <span className="shrink-0 text-right">
-                <span className="block text-sm tabular-nums text-neutral-900 dark:text-neutral-100">
-                  {formatPrice(row.price)}
-                </span>
-                <span
-                  className={`block text-xs tabular-nums ${costTone(row.costDifference)}`}
-                >
-                  {formatCostDifference(row.costDifference)}
-                </span>
+              <span className="w-16 shrink-0 text-right text-sm tabular-nums text-neutral-900 dark:text-neutral-100">
+                {formatPrice(row.price)}
+              </span>
+              <span
+                className={`w-16 shrink-0 text-right text-sm tabular-nums ${costTone(row.costDifference)}`}
+              >
+                {formatCostDifference(row.costDifference)}
+              </span>
+              <span className="hidden w-40 shrink-0 truncate text-right text-xs text-neutral-500 sm:block dark:text-neutral-400">
+                {row.rankValue}
+              </span>
+              <span className="w-12 shrink-0 text-right text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+                {row.expectedPointsNext.toFixed(1)}
               </span>
             </RowShell>
           </li>
@@ -187,9 +218,9 @@ function RowShell({
   href: string | null
   children: React.ReactNode
 }) {
-  const shape = 'flex items-start justify-between gap-3 px-3 py-2'
+  const shape = 'flex items-start gap-3 px-3 py-1.5'
   if (href === null) {
-    return <span className={`${shape} opacity-60`}>{children}</span>
+    return <span className={`${shape} opacity-55`}>{children}</span>
   }
   return (
     <Link

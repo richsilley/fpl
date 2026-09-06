@@ -42,7 +42,7 @@ export function RatingToggle({
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="text-sm text-neutral-500 dark:text-neutral-400">
-        Difficulty
+        View
       </span>
       <span className="inline-flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700">
         <Option
@@ -50,21 +50,21 @@ export function RatingToggle({
           selected={rating === 'fpl'}
           title="FPL's own fixture difficulty rating, fixed before the season started"
         >
-          FPL
+          FDR (FPL)
         </Option>
         <Option
           href={href('form')}
           selected={rating === 'form'}
           title="Derived from results: recent goal difference and points, shrunk towards a prior, with a league-wide home advantage"
         >
-          Form
+          FDR (Form)
         </Option>
         <Option
           href={href('blend')}
           selected={rating === 'blend'}
           title="Form, offset by the club's own strength: how hard the fixture is for them. Changes cell colours only — the Fixture Score is the same as Form"
         >
-          Blend
+          FDR &times; Strength
         </Option>
       </span>
     </div>

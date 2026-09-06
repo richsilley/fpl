@@ -17,9 +17,14 @@ import type { Horizon } from '@/lib/fpl/horizon'
  * Club Blocks views reading the same `horizon` parameter: switching view keeps
  * the run of gameweeks you were looking at.
  *
- * Only built views are listed. Form and Ownership are in section 8.2's table
- * but are build steps 5 to 7, and a tab that leads nowhere is worse than no
- * tab.
+ * ## They are the loudest thing on the page, on purpose
+ *
+ * The whole app is four views over one squad, so choosing between them is the
+ * primary act. As understated tabs they lost that fight to the manager ID form
+ * and the view-as picker sitting above them; those have since moved into the
+ * menu, and these have been given the weight the hierarchy always implied —
+ * segmented buttons, larger text, the selected one filled rather than
+ * underlined.
  */
 export function ViewTabs({
   managerId,
@@ -39,7 +44,7 @@ export function ViewTabs({
   return (
     <nav
       aria-label="View"
-      className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800"
+      className="flex w-full gap-1 overflow-x-auto rounded-lg border border-neutral-200 bg-neutral-100 p-1 dark:border-neutral-800 dark:bg-neutral-800/60"
     >
       {BUILT_VIEWS.map((id) => {
         const selected = id === view
@@ -55,10 +60,10 @@ export function ViewTabs({
             })}
             aria-current={selected ? 'page' : undefined}
             scroll={false}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 whitespace-nowrap rounded-md px-3 py-2 text-center text-sm font-semibold transition-colors sm:text-base ${
               selected
-                ? 'border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-50'
-                : 'border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200'
+                ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-50'
+                : 'text-neutral-600 hover:bg-white/60 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-50'
             }`}
           >
             {VIEW_LABELS[id]}

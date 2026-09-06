@@ -157,6 +157,13 @@ export function parseRating(value: string | undefined): RatingSource {
     : DEFAULT_RATING
 }
 
+/** Which overlay the URL asks for. Anything unrecognised means none. */
+export function parsePanel(
+  value: string | undefined
+): 'menu' | 'population' | null {
+  return value === 'menu' || value === 'population' ? value : null
+}
+
 /** A manager or league ID from the URL. Returns null for anything invalid. */
 export function parseEntityId(value: string | undefined): number | null {
   if (!value || !/^\d+$/.test(value)) {
@@ -292,6 +299,15 @@ export type AppState = {
    * a new view with a dialogue already open over it.
    */
   swap?: string | null
+  /**
+   * Which overlay is open, if any: the menu drawer or the Ownership
+   * population picker (section 7.8).
+   *
+   * URL state rather than component state so an overlay needs no client
+   * JavaScript: opening it is a link, and so is the backdrop that closes it.
+   * Not carried between views, like `swap`: an overlay is a momentary act.
+   */
+  panel?: 'menu' | 'population' | null
 }
 
 /**
@@ -336,6 +352,7 @@ export function buildHref({
   out,
   in: incoming,
   swap,
+  panel,
 }: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
@@ -375,6 +392,9 @@ export function buildHref({
   }
   if (swap) {
     params.set('swap', swap)
+  }
+  if (panel) {
+    params.set('panel', panel)
   }
   return `/?${params.toString()}`
 }

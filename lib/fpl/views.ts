@@ -50,6 +50,8 @@ export type MatrixData = {
    * publishes nothing form-aware to put in the column.
    */
   teamStrength: Map<number, number>
+  /** Completed matches per club, for the Form view's minutes column (7.3). */
+  matchesPlayed: Map<number, number>
 }
 
 export async function loadMatrixData(
@@ -78,6 +80,7 @@ export async function loadMatrixData(
     fixtures: buildFixtureIndex(fixtures, bootstrap.teams, fixtureRating),
     rating,
     teamStrength: fixtureRating.teamStrength,
+    matchesPlayed: fixtureRating.matchesPlayed,
     teams: bootstrap.teams,
     startGameweek,
     columns: gameweekColumns(startGameweek),

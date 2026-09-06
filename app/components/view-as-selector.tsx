@@ -1,11 +1,8 @@
-import Link from 'next/link'
-
 import { AutoSubmitSelect } from '@/app/components/auto-submit-select'
 import type { Horizon } from '@/lib/fpl/horizon'
 import {
   buildHref,
   carriedFields,
-  withoutViewAs,
   type CarriedState,
   type ViewId,
 } from '@/lib/fpl/params'
@@ -27,11 +24,13 @@ import type { SquadManager } from '@/lib/fpl/squad'
  * empty and disabled would be a control that does nothing, which is worse than
  * a control that is not there yet.
  *
- * ## It sits above the tabs, not inside a view
+ * ## It lives in the menu; the header carries the state
  *
- * Whose squad you are looking at outranks which columns you are looking at, so
- * the control lives above the view tabs and stays put on all four. Switching
- * view keeps the borrowed squad; switching squad keeps the view.
+ * The picker is used once and then forgotten, so it sits in the menu drawer
+ * rather than occupying the top of every page. What must stay visible is the
+ * *fact* that a borrowed squad is on screen, and that belongs with the name of
+ * the squad: the header turns amber and carries the way back (section 7.1).
+ * Duplicating the button here would be two ways to do one thing.
  *
  * ## `id` never changes
  *
@@ -49,6 +48,7 @@ export function ViewAsSelector({
   horizon,
   sort,
   carry,
+  panel,
 }: {
   /** The user's own manager ID: `id`, never the squad on screen. */
   managerId: string
@@ -62,13 +62,23 @@ export function ViewAsSelector({
   horizon: Horizon
   sort: string | null
   carry: CarriedState
+  /** Which overlay is open, so a step that narrows a choice can keep it open. */
+  panel: 'menu' | 'population' | null
 }) {
   const base = { id: managerId, view, horizon, sort }
   const hidden = carriedFields({ ...base, ...carry })
+  // The no-JS path has to keep the drawer open too, so the league form's
+  // hidden fields carry the panel and the team form's deliberately do not.
+  const leagueHidden = carriedFields({ ...base, ...carry, panel })
 
   // Choosing a different league invalidates the manager chosen from the old
   // one, so `as` is cleared here. Choosing a manager keeps the league, so the
   // dropdown that produced them is still there to choose again from.
+  //
+  // **Picking a league keeps the drawer open**, because it is not the answer —
+  // it is the question narrowing, and the list of teams it produces is the
+  // next thing to read. Only picking a team closes it, because that is the
+  // act the drawer exists for and there is nothing left to choose.
   const leagueOptions = leagues.map((league) => ({
     value: String(league.id),
     label:
@@ -80,6 +90,7 @@ export function ViewAsSelector({
       ...carry,
       as: null,
       asLeague: String(league.id),
+      panel,
     }),
   }))
 
@@ -90,21 +101,15 @@ export function ViewAsSelector({
   }))
 
   if (leagues.length === 0) {
-    return null
+    return (
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+        You are not in any mini leagues, so there is nobody to view as.
+      </p>
+    )
   }
 
   return (
-    <div
-      className={`flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4 ${
-        viewingAs
-          ? 'border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/25'
-          : 'border-neutral-200 dark:border-neutral-800'
-      }`}
-    >
-      <span className="text-sm font-medium text-neutral-700 sm:pb-1 dark:text-neutral-300">
-        View as
-      </span>
-
+    <div className="flex flex-col gap-3">
       <AutoSubmitSelect
         id="viewas-league"
         name="asleague"
@@ -112,7 +117,7 @@ export function ViewAsSelector({
         value={carry.asLeague ?? ''}
         placeholder="Choose a league…"
         options={leagueOptions}
-        hidden={hidden}
+        hidden={leagueHidden}
         submitLabel="Show"
       />
 
@@ -129,28 +134,13 @@ export function ViewAsSelector({
         />
       )}
 
-      {/* Always on screen while a borrowed squad is, and one press: the way
-          back must never be something you have to reconstruct from the
-          dropdowns you came in through. */}
       {viewingAs && (
-        <Link
-          href={buildHref({ ...base, ...withoutViewAs(carry) })}
-          scroll={false}
-          className="inline-flex items-center gap-1.5 self-start rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-neutral-800 sm:self-auto dark:border-neutral-200 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
-          <span aria-hidden>←</span>
-          Back to my team
-        </Link>
-      )}
-
-      {viewingAs && (
-        <p
-          role="status"
-          className="w-full text-xs text-amber-900 dark:text-amber-200"
-        >
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Showing{' '}
-          <strong className="font-semibold">{viewingAs.teamName}</strong>. Every
-          view below is their squad, not yours.
+          <strong className="font-semibold text-neutral-700 dark:text-neutral-200">
+            {viewingAs.teamName}
+          </strong>
+          . The way back is in the header.
         </p>
       )}
     </div>

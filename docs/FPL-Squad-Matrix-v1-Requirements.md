@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.17
+**Version:** 1.19
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -217,11 +217,11 @@ Distance decay, weighting nearer gameweeks more heavily than distant ones, is de
 
 FPL's FDR is set before a ball is kicked and never moves. A promoted side that turns out to be decent keeps its easy rating all season; a big club in freefall keeps its hard one. Two derived alternatives sit alongside it, **toggled per 8.2 so a shared link carries which one produced it**.
 
-| `rating=` | Matrix colour | Fixture Score | Team Strength |
+| `rating=` (labelled **View**) | Matrix colour | Fixture Score | Team Strength |
 |---|---|---|---|
-| `fpl` *(default)* | FPL integers | from FPL FDR | ours |
-| `form` | `plainFDR` | from `plainFDR` | ours |
-| `blend` | `blendFDR` | **from `plainFDR`** | ours |
+| `fpl` *(default)*, shown as **FDR (FPL)** | FPL integers | from FPL FDR | ours |
+| `form`, shown as **FDR (Form)** | `plainFDR` | from `plainFDR` | ours |
+| `blend`, shown as **FDR × Strength** | `blendFDR` | **from `plainFDR`** | ours |
 
 **FPL's own rating is the default.** Nobody is shown a derived number without having asked for it. An unrecognised value falls back to `fpl`, which includes the retired `custom` from the previous two-mode version.
 
@@ -369,6 +369,8 @@ All six describe the gameweek on screen rather than live values, which is why th
 
 **Top *x*% is the inverse framing of the Ownership view's "ahead of *y*% of managers".** Both are shown deliberately: the header answers "how am I doing", section 7.4 answers "how much room is there above me". They should always sum to 100.
 
+The header is sticky and carries the menu button; see 7.8 for the shell it sits in.
+
 #### 7.1.1 Viewing another manager's squad
 
 Any of the user's league rivals can be loaded into **all four views**, so the whole matrix can be pointed at someone else's squad.
@@ -379,7 +381,7 @@ The control is a two-step cascade — **View as → from league → team** — a
 - Choosing one lists that league's managers, ordered by league rank, **excluding the user themselves**
 - The team dropdown does not exist until a league is chosen, rather than appearing empty and disabled
 - Choosing a team loads it immediately; there is no confirm button (7.4.2)
-- A **one-press "Back to my team"** is on screen the whole time a borrowed squad is, including on the error page if that squad fails to load
+- A **one-press "Back to my team"** is on screen the whole time a borrowed squad is, including on the error page if that squad fails to load. It lives **in the header**, next to the team name, and the whole header bar turns amber (7.8)
 
 **A flat list of every rival was rejected.** Without the league that gives it context, a team name means nothing, and the league is what decides which managers can be fetched at all.
 
@@ -423,7 +425,15 @@ Every column here is a number, and presented flat they read as a wall of them. T
 
 **No change renders as an empty cell, not a dash.** Most players have not moved in a given week, and a column of placeholders hides the handful of rows that did.
 
-**Column order:** Price, GW, Season, Pts, PPG, Form, Mins, xGI, DefCon, xP (FPL). The bar columns are grouped together so the only wide columns in the table sit together rather than being interleaved with tight ones, and xP sits past them at the far right, ruled off.
+**Column order:** Availability, Price, GW, Season, Pts, PPG, xP, Form, Mins, xGI, DefCon. The bar columns are grouped at the end so the only wide columns sit together rather than being interleaved with tight ones. xP sits with the returns it summarises, before the bars.
+
+**Availability is a column, in the same place as the Fixtures view's Fixture Score**: second, frozen, and the same width, so the two tables line up column for column and switching between them moves nothing. It was a dot beside the name, which made the two tables disagree about what their second column is and left the flag too small to catch.
+
+It is drawn as a short centred pill: green available, amber doubtful with the percentage on it, red out. **Short and centred rather than filling the cell** — at full width fifteen of them read as one solid block of colour, and the point of the column is to pick out the one or two that are not green.
+
+**Mins is minutes per match, not the season total.** A total becomes abstract the moment clubs have played different numbers of matches, which blanks and doubles guarantee. The denominator is that club's **started** fixtures counted from `fixtures/`, which is right through blanks and doubles; the `teams` array's own `played` is never populated. The bar runs against the 90 available rather than against the squad, so a full bar means every minute played.
+
+**The bar hues are one step stronger than they were, and spread further apart**: blue, grey, purple, teal. Four columns need four that separate at a glance, and the earlier pastels were too close to tell apart, which defeated the point of giving each column its own.
 
 **Alignment.** Every header except Player is centred, and every data cell is centred except Player and the bar columns. The bar columns keep their numbers right-aligned: centring one would set it adrift from the end of its own bar, which is the one place in the table where a value has a length to sit against.
 
@@ -505,9 +515,25 @@ The comparison population is selectable:
 
 **This is one function with three inputs, not three features.** The calculation is identical; only the denominator changes.
 
-**Columns are fixed across all three modes:** Player, Global, League, Rival, Diff, Flag, always in that order. Only the cells the selected mode can fill carry a value; the rest render an em dash. Global mode dashes League, Rival and Diff; league mode dashes Rival; rival mode dashes League.
+**The player column is the shared one**, identical in width and formatting to Fixtures and Form, so switching view leaves it exactly where it was. That is the part that must not move, and pinning it is what frees the rest.
 
-The reason is that the table must not reflow when the population changes. Three different column sets meant re-finding every column on each switch, which made comparing two populations harder than reading either one. A dash is also the honest answer: "this mode does not measure that" is a different statement from "this measures zero", and the two must not look alike.
+**The comparison columns appear rather than filling with dashes:**
+
+| Mode | Columns |
+|---|---|
+| global | Global, Flag |
+| league | Global, League, Diff, Flag |
+| rival | Global, League, Rival, Diff, Flag |
+
+An earlier version kept all six always and dashed the unused ones, to stop the table reflowing. That traded a reflow for four dead columns on the view most people open first.
+
+**League stays visible in rival mode.** A rival is picked out of a league, and "they own him, and so does half the league" is a different fact from "they own him and nobody else does". Both populations are built when both are selected; the league fan-out is cached and is usually already warm from having chosen the rival there.
+
+**Global and League are wide and carry bars**, in two hues with high contrast, because they sit side by side and the whole point is telling them apart at a glance.
+
+**Rival ownership is a property of the whole row, so the row carries it.** Players the rival does not own are greyed back and the ones they do own stay crisp with a filled "Owns" chip. The question in rival mode is "which of mine do they also have", and that is answered by scanning names, not by reading across to a column of yes and no.
+
+**The population picker floats** behind a "Compare against …" button that names the current selection (7.8). It was a permanent card of links and ID forms above the table, which was the untidiest thing on the page and pushed the table down on the one view where the table *is* the comparison.
 
 **Rival dropdown.** When a mini league is selected, offer that league's managers as a dropdown: team name with manager name, ordered by league rank, excluding the user themselves. **Selecting one runs the comparison immediately; there is no Compare button** (7.4.2). **This costs no extra API call** — the standings response the league comparison already fetches carries `entry`, `player_name` and `entry_name` for every row. Hide the dropdown entirely in global mode, where there is no league to populate it from. Keep the manual rival manager ID field for rivals outside the user's leagues.
 
@@ -598,7 +624,7 @@ Column widths scale to the number on show, and a trailing spacer absorbs any wid
 
 Shared by the Fixtures and Club Blocks views. Both must read from the same `horizon` URL parameter, so switching between the views preserves it.
 
-- **Preset buttons** for 1, 3, 5, 7 and **All**, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline. **All** is not a fixed number: it resolves to the gameweeks remaining, so it moves as the season does and is highlighted whenever the applied horizon happens to be the whole remainder
+- **Preset buttons** for 1, 3, 5, 7, 9 and **All**, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline. **All** is not a fixed number: it resolves to the gameweeks remaining, so it moves as the season does and is highlighted whenever the applied horizon happens to be the whole remainder
 - **Numeric input** accepting any integer from 1 to the number of gameweeks remaining in the season
 - Clicking a preset sets the numeric input
 - Typing a custom value clears the preset highlight; typing a value that matches a preset highlights it
@@ -657,6 +683,42 @@ A persistent summary strip, always visible, not scrolled away — so it is stick
 
 **Warnings are informational and never block a swap.**
 
+### 7.8 App shell
+
+The app is four views over one squad. Everything else is chrome, and chrome had taken the top third of every page: a title, a manager ID form, a view-as card, and only then the tabs. The eye landed on the least important thing first.
+
+#### The menu
+
+**Loading a squad and viewing as another manager live in a drawer** behind a button in the header. Both are done once and then forgotten, so they cost one click on the rare occasion they are wanted and give the views the top of the page back. A drawer rather than a dropdown because it holds two full controls, one a two-step cascade, and both want room at 380px.
+
+Before a squad is loaded there is no header and no menu, so the title and the ID form stay on the page.
+
+#### The header is the one permanent bar
+
+**Sticky at every width**, because whose squad you are looking at is the fact every view depends on, and the menu button travels with it. The scratch-squad strip (7.7) rides in the same sticky container, so the two can never overlap.
+
+On a phone the six tiles would eat a third of the screen while stuck to the top, so they collapse to a single line of small text. The identity and the menu, which is what the bar is really for, stay at every width.
+
+**Viewing another manager's squad turns the whole bar amber and puts the way back beside the team name.** That is a statement about what you are looking at, so it belongs with the name of what you are looking at, and it must be reachable without opening anything. The view-as picker in the menu therefore carries no second copy of the button.
+
+#### The four views are the loudest thing on the page
+
+Segmented buttons filling the width, larger text, the selected one filled rather than underlined. As understated tabs they lost the fight to the cards above them; those have gone, and these have been given the weight the hierarchy always implied.
+
+#### Overlays float; they never push
+
+The menu, the Ownership population picker (7.4) and the replacement panel (7.7) are all floating panels over a dimmed backdrop. In the document flow, opening one shoved everything below it down the page — the table you were reading moved out from under you at the moment you asked a question about it.
+
+**They are URL state, not component state.** `?panel=menu`, `?panel=population` and `?swap=<id>`. Opening is a link and the backdrop is a link, so an overlay needs no client JavaScript, survives the back button, and cannot get stuck open. Clicking anywhere outside the panel lands on the backdrop and navigates to the closed URL, which is dismiss-on-click-away for free.
+
+Unlike the scratch squad, these are **not** carried between views: an overlay is a momentary act, and arriving on a new view with a dialogue already open over it would be surprising.
+
+**A step that narrows a choice keeps the overlay open; a step that answers it closes.** Picking a league in the view-as cascade produces the list of teams to read next, so the drawer stays; picking a team is the act the drawer exists for, so it closes. The same rule governs the Ownership population picker: league keeps it open, rival closes it. Loading a squad closes the drawer for the same reason.
+
+#### One gutter for the whole page
+
+The sticky bars bleed to the window edge but pad themselves back to the same gutter as the content below, and both are capped at the same width and centred. The menu button, the view tabs and every table therefore start on exactly the same vertical line, and the margins are equal on both sides. Before this the bars were centred within a maximum width while the page content ran the full window, so the two disagreed by however wide the window was.
+
 ## 8. Technical requirements
 
 ### 8.1 Architecture
@@ -700,6 +762,7 @@ This makes every view shareable by construction and removes the need for account
 | `out` | Player IDs transferred out, comma separated (7.7) | None. No changes modelled |
 | `in` | Their positionally paired replacements (7.7) | None |
 | `swap` | Squad player whose replacement panel is open (7.7) | None. Panel closed |
+| `panel` | `menu` or `population`: which overlay is open (7.8) | None. No overlay |
 
 `league` and `rival` select the Ownership view's reference population. They are **not** mutually exclusive: a URL carrying both means "compare against this rival, chosen from this league", and `rival` is the population. `league` alone is league mode. See 7.4 for why the league is kept.
 
@@ -724,10 +787,12 @@ Required, both for performance and to avoid placing load on FPL's servers.
 | Data | Cache duration | Reason |
 |---|---|---|
 | `bootstrap-static` | 1 hour | Prices change once daily |
-| `fixtures` | 24 hours | Changes rarely |
+| `fixtures` | 1 hour | The fixture *list* changes rarely, but the same payload carries `started`, `finished` and the scores, and those change every match day. See below |
 | A manager's `picks` | Rest of gameweek | Immutable once the deadline passes |
 | League standings | 1 hour | Updates during and after matches |
 | `entry/{id}/` | 1 hour | Not in the original table. Only the manager name, team name and league list are read from it, and none of those change in practice; this matches the standings duration rather than inventing a longer one |
+
+**`fixtures` was 24 hours and is now 1, matching `bootstrap-static`.** Two features divide one payload by the other — the form-based difficulty rating (6.7) reads results, and the Form view's average minutes (7.3) divides minutes from bootstrap by matches from fixtures. At 24 hours they disagreed mid-gameweek: the minutes knew a club had played three matches while the fixtures still said two, and the average came out at 135 minutes per match. **Any two figures divided by each other have to come from payloads of the same age.**
 
 **"Rest of gameweek" is computed, not fixed.** It is the time remaining until the next deadline, since that is when a manager's picks can next change. A stale deadline can only shorten it, never extend it past the next one.
 
