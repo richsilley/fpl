@@ -27,7 +27,7 @@ export function ManagerIdForm({ currentId }: { currentId?: string }) {
           inputMode="numeric"
           pattern="[0-9]*"
           autoComplete="off"
-          placeholder="1234567"
+          placeholder="Enter a manager ID to load a squad."
           className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-base tabular-nums text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500/30 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-600"
         />
       </div>

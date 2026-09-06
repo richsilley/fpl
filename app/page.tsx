@@ -149,21 +149,21 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
           form in, so it stays on the page. Once one is loaded, everything here
           moves into the menu and the views take the top of the page. */}
       {!managerId && (
-        <div className="mx-auto w-full max-w-[1600px]">
-          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
-            FPL Squad Matrix
+        <div className="mx-auto w-full max-w-3xl">
+          <h1 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
+            The Edge
           </h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            Load any manager&rsquo;s fifteen players, then switch the columns to
-            answer a different question.
+          <p className="mt-2 text-base text-neutral-600 dark:text-neutral-300">
+            Gain the edge over your rivals. A Fantasy Premier League planning
+            tool built on fixtures, form and ownership.
           </p>
-          <div className="mt-4">
+          <div className="mt-6">
             <ManagerIdForm currentId={managerId} />
           </div>
         </div>
       )}
 
-      <div className={managerId ? '' : 'mx-auto w-full max-w-[1600px] mt-8'}>
+      <div className={managerId ? '' : 'mx-auto mt-8 w-full max-w-3xl'}>
         {managerId ? (
           <MatrixSection
             managerId={managerId}
@@ -1016,19 +1016,69 @@ function parseManagerId(value: string): number {
   return parsed
 }
 
+/**
+ * The landing page below the ID box.
+ *
+ * Everything here exists because the manager ID is the one thing standing
+ * between a new arrival and the app, and FPL makes it genuinely hard to find:
+ * it is nowhere in the mobile app, and on the website it only appears in the
+ * address bar of two particular pages. Anyone who does not already know their
+ * number cannot get past this screen, so the instructions are the page rather
+ * than a footnote on it.
+ */
 function EmptyState() {
   return (
-    <div className="max-w-3xl rounded-lg border border-dashed border-neutral-300 p-6 text-center dark:border-neutral-700">
-      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        Enter a manager ID to load a squad.
-      </p>
-      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-500">
-        Yours is in the address bar on the FPL site when you open your Points
-        tab, for example{' '}
-        <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono dark:bg-neutral-800">
-          /entry/2695180/event/2
-        </code>{' '}
-        means your ID is 2695180.
+    <div className="space-y-6">
+      <section className="rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
+        <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+          Find your manager ID
+        </h2>
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+          It only appears on the FPL website. It cannot be found using the
+          mobile app.
+        </p>
+
+        <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-neutral-700 marker:text-neutral-400 dark:text-neutral-300 dark:marker:text-neutral-500">
+          <li>
+            Sign in at{' '}
+            <a
+              href="https://fantasy.premierleague.com"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="font-medium underline decoration-neutral-300 underline-offset-2 hover:decoration-neutral-900 dark:decoration-neutral-600 dark:hover:decoration-neutral-100"
+            >
+              fantasy.premierleague.com
+            </a>
+          </li>
+          <li>Open Points or Pick Team</li>
+          <li>Click Gameweek History or Transfer History</li>
+          <li>
+            Your ID is the number straight after <code>/entry/</code> in the
+            address bar
+          </li>
+        </ol>
+
+        {/* The example does the explaining: the number is picked out of a real
+            address rather than described in the abstract. It wraps rather than
+            scrolls — kept on one line, a phone pushes the highlighted number
+            off the right edge, which hides the only part that matters. */}
+        <p className="mt-4 break-all rounded-md bg-neutral-100 px-3 py-2 font-mono text-sm text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+          fantasy.premierleague.com/entry/
+          <span className="rounded bg-amber-200 px-1 font-bold text-neutral-900 dark:bg-amber-500/40 dark:text-neutral-50">
+            1234567
+          </span>
+          /history
+        </p>
+
+        <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-300">
+          To look up someone else, find them in a league table, click View, and
+          read their number the same way.
+        </p>
+      </section>
+
+      <p className="text-sm text-neutral-500 dark:text-neutral-400">
+        Best on a laptop or tablet. The tables run wide, and a phone means a lot
+        of sideways scrolling.
       </p>
     </div>
   )

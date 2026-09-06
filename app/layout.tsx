@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'FPL Squad Matrix',
+  title: 'The Edge',
   description:
-    "Load any FPL manager's fifteen players, then switch the columns to answer a different question about the squad.",
+    'Gain the edge over your rivals. A Fantasy Premier League planning tool built on fixtures, form and ownership.',
 }
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
