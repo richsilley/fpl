@@ -59,8 +59,21 @@ export type Replacement = {
   haystack: string
 }
 
-/** What the list is ordered by, named for the panel's header. */
-export type ReplacementRanking = { label: string; metric: string }
+/**
+ * What the list is ordered by.
+ *
+ * Two names, because the panel says it twice in places of different width.
+ * `label` is the sentence form for the description line ("ranked by fixture
+ * score over the next 7 gameweeks"); `column` is the metric's bare name for
+ * the heading above the values ("Fixture Score"). That heading used to read
+ * "Ranked by", which spent a column on saying nothing the values below did
+ * not already say.
+ */
+export type ReplacementRanking = {
+  label: string
+  column: string
+  metric: string
+}
 
 export function rankingFor(
   view: ViewId,
@@ -70,10 +83,8 @@ export function rankingFor(
 ): ReplacementRanking {
   if (view === 'form') {
     const { field } = splitFormSort(sort)
-    if (field !== 'squad') {
-      return { label: FORM_LABELS[field] ?? 'Form', metric: field }
-    }
-    return { label: 'Form', metric: 'form' }
+    const label = field === 'squad' ? 'Form' : (FORM_LABELS[field] ?? 'Form')
+    return { label, column: label, metric: field === 'squad' ? 'form' : field }
   }
 
   if (view === 'ownership') {
@@ -82,12 +93,21 @@ export function rankingFor(
     // differentials are how the gap closes. The panel opens on whichever end
     // that is, so the ranking agrees with the guidance above the table.
     return position === 'behind'
-      ? { label: 'Ownership, differentials first', metric: 'ownership-low' }
-      : { label: 'Ownership, most owned first', metric: 'ownership-high' }
+      ? {
+          label: 'Ownership, differentials first',
+          column: 'Ownership',
+          metric: 'ownership-low',
+        }
+      : {
+          label: 'Ownership, most owned first',
+          column: 'Ownership',
+          metric: 'ownership-high',
+        }
   }
 
   return {
-    label: `Fixture Score over ${horizon} gameweek${horizon === 1 ? '' : 's'}`,
+    label: `Fixture Score over the next ${horizon} gameweek${horizon === 1 ? '' : 's'}`,
+    column: 'Fixture Score',
     metric: 'fixtures',
   }
 }

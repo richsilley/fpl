@@ -1,7 +1,8 @@
 import { Overlay } from '@/app/components/overlay'
 
 /**
- * The menu drawer (section 7.8): everything that is not one of the four views.
+ * The Options dialog (section 7.8): everything that is not one of the four
+ * views.
  *
  * Loading a squad and borrowing someone else's are both things you do once and
  * then stop thinking about, but they used to occupy the top third of every
@@ -9,8 +10,14 @@ import { Overlay } from '@/app/components/overlay'
  * is actually for. Moving them behind a button costs one click on the rare
  * occasion they are wanted and gives the views the top of the page back.
  *
- * A drawer rather than a dropdown because it holds two full controls, one of
- * them a two-step cascade, and both want room to breathe at 380px.
+ * ## A centred dialog, not a left drawer
+ *
+ * It was a drawer pinned to the left edge, which made the app's one settings
+ * panel look like a different kind of object from the population picker and
+ * the replacement panel, both of which float in the middle. Three panels doing
+ * the same job now open the same way, from the same component, and dismiss the
+ * same way. It is narrower than the other two because it holds a short stack
+ * of controls rather than a table.
  */
 export function AppMenu({
   closeHref,
@@ -20,14 +27,14 @@ export function AppMenu({
   children: React.ReactNode
 }) {
   return (
-    <Overlay closeHref={closeHref} label="Menu" align="drawer">
-      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+    <Overlay closeHref={closeHref} label="Options" width="narrow">
+      <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-          Menu
+          Options
         </h2>
         <CloseButton href={closeHref} />
       </div>
-      <div className="space-y-6 p-4">{children}</div>
+      <div className="space-y-6 overflow-y-auto p-4">{children}</div>
     </Overlay>
   )
 }
@@ -43,20 +50,34 @@ export function CloseButton({ href }: { href: string }) {
   )
 }
 
-/** A titled block inside the drawer. */
+/**
+ * A titled block inside the dialog.
+ *
+ * Sentence case, not the small caps it used to be: these are headings like any
+ * other, and two of them now carry a line of helper text underneath, which all
+ * caps sat badly above.
+ */
 export function MenuSection({
   title,
   children,
+  hint,
 }: {
   title: string
   children: React.ReactNode
+  /** Sits under the controls: what this does, once you have looked at it. */
+  hint?: React.ReactNode
 }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <h3 className="mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
         {title}
       </h3>
       {children}
+      {hint && (
+        <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+          {hint}
+        </p>
+      )}
     </section>
   )
 }

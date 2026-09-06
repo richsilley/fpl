@@ -11,10 +11,10 @@
 export function FormLegend() {
   return (
     <div className="rounded-lg border border-neutral-200 px-4 py-3 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
-      {/* Three columns on a wide screen, one on a phone. Twelve short
-          definitions in a single stack is a long scroll past the table they
-          describe. */}
-      <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+      {/* One entry per row, each free to run the full width of the table
+          above. Laid out in columns under a full-width table, every definition
+          wrapped into fragments while two thirds of the line sat empty. */}
+      <dl className="space-y-1.5">
         <Entry term="Availability">
           the dot beside each name. Green is fit, amber is doubtful, red is out.
           Team news appears under the name when there is any.

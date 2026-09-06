@@ -20,9 +20,13 @@ import type { SquadManager } from '@/lib/fpl/squad'
  * dropdown also has to come first because it is what decides which managers
  * can be fetched at all.
  *
- * The team dropdown is therefore absent until a league is chosen. Rendering it
- * empty and disabled would be a control that does nothing, which is worse than
- * a control that is not there yet.
+ * The team dropdown is therefore **present but disabled** until a league is
+ * chosen. It used to be absent entirely, on the reasoning that a control which
+ * does nothing is worse than one that is not there — but that left the first
+ * dropdown looking like the whole feature, with no sign that a second step
+ * followed, so choosing a league appeared to do nothing at all. A greyed
+ * control announces the step and says it is not your turn yet; a missing one
+ * announces nothing.
  *
  * ## It lives in the menu; the header carries the state
  *
@@ -113,7 +117,7 @@ export function ViewAsSelector({
       <AutoSubmitSelect
         id="viewas-league"
         name="asleague"
-        label="From league"
+        label="League"
         value={carry.asLeague ?? ''}
         placeholder="Choose a league…"
         options={leagueOptions}
@@ -121,18 +125,17 @@ export function ViewAsSelector({
         submitLabel="Show"
       />
 
-      {members !== null && (
-        <AutoSubmitSelect
-          id="viewas-team"
-          name="as"
-          label="Team"
-          value={carry.as ?? ''}
-          placeholder="Choose a team…"
-          options={memberOptions}
-          hidden={hidden}
-          submitLabel="View"
-        />
-      )}
+      <AutoSubmitSelect
+        id="viewas-team"
+        name="as"
+        label="Manager"
+        value={carry.as ?? ''}
+        placeholder="Choose a manager…"
+        options={memberOptions}
+        hidden={hidden}
+        submitLabel="View"
+        disabled={members === null}
+      />
 
       {viewingAs && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">

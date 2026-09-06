@@ -117,6 +117,8 @@ export type FplElement = {
 export type FplElementType = {
   id: number
   singular_name_short: string
+  /** "Goalkeeper", "Defender". Spelled out wherever a reader is addressed. */
+  singular_name: string
   plural_name: string
 }
 

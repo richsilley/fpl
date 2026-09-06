@@ -20,8 +20,10 @@ export type SquadPlayer = {
   /** Short display name, e.g. "Saka". */
   name: string
   fullName: string
-  /** GKP, DEF, MID or FWD. */
+  /** GKP, DEF, MID or FWD. Column headings and thresholds. */
   position: string
+  /** "Goalkeeper", "Defender". Prose that addresses the reader. */
+  positionName: string
   /** Club ID, for joining to fixtures and to the three-per-club limit. */
   teamId: number
   /** Club short name, e.g. "ARS". */
@@ -252,6 +254,7 @@ function toSquadPlayer(
     name: element.web_name,
     fullName: `${element.first_name} ${element.second_name}`.trim(),
     position: position?.singular_name_short ?? '?',
+    positionName: position?.singular_name ?? 'player',
     teamId: element.team,
     club: club?.short_name ?? '?',
     clubName: club?.name ?? 'Unknown club',

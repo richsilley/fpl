@@ -53,27 +53,26 @@ export function ScratchStrip({
       }`}
     >
       <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-5 gap-y-2">
-        <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-          Scratch squad
-        </span>
-
+        {/* One line: what this is, how much has changed, what is left. The
+            middle dots are separators, so they are hidden from the reader
+            who is hearing this rather than seeing it. */}
         <span className="text-sm text-neutral-600 dark:text-neutral-300">
-          {applied.length} change{applied.length === 1 ? '' : 's'}
-        </span>
-
-        <span className="text-sm tabular-nums text-neutral-600 dark:text-neutral-300">
-          <span className="text-neutral-500 dark:text-neutral-400">
-            Available{' '}
+          <span className="font-semibold text-neutral-900 dark:text-neutral-50">
+            Scratch squad
           </span>
+          <Dot />
+          {applied.length} change{applied.length === 1 ? '' : 's'}
+          <Dot />
           <span
-            className={`font-semibold ${
+            className={`font-semibold tabular-nums ${
               budget.available < 0
                 ? 'text-rose-700 dark:text-rose-300'
                 : 'text-neutral-900 dark:text-neutral-50'
             }`}
           >
             {formatPrice(budget.available)}
-          </span>
+          </span>{' '}
+          available
         </span>
 
         {warnings.overBudget > 0 && (
@@ -94,14 +93,22 @@ export function ScratchStrip({
         </span>
       </div>
 
-      {/* Section 7.7: the budget figures come from the last deadline and FPL
-          does not republish them as prices move, so saying "available" without
-          this caveat would overstate how exact it is. */}
+      {/* Two claims, and the order matters. The first is the one that stops a
+          reader panicking that the app has edited their real team, so it leads
+          and is emphasised; the caveat about the figures follows it.
+
+          **The first sentence must never be truncated.** It is the only thing
+          on screen saying the real team is untouched, so it is its own element
+          that wraps rather than sharing a line that could clip. Section 7.7:
+          the budget figures come from the last deadline and FPL does not
+          republish them as prices move, so "available" without the caveat
+          would overstate how exact it is. */}
       <p className="mx-auto mt-1.5 w-full max-w-[1600px] text-xs text-neutral-500 dark:text-neutral-400">
-        Bank {formatPrice(budget.bank)} and squad value{' '}
-        {formatPrice(budget.squadValue)} are as at the last deadline and do not
-        move with prices, so this is an estimate. Selling prices in FPL also
-        depend on what you paid.
+        <span className="font-medium text-neutral-700 dark:text-neutral-300">
+          Nothing here changes your real FPL team.
+        </span>{' '}
+        Bank and squad value are from the last deadline and don&rsquo;t move
+        with prices, so available funds are an estimate.
       </p>
 
       {showDropped && dropped.length > 0 && (
@@ -126,6 +133,15 @@ export function ScratchStrip({
         </p>
       )}
     </div>
+  )
+}
+
+/** A separator, not a word: hidden from screen readers. */
+function Dot() {
+  return (
+    <span aria-hidden className="px-2 text-neutral-400 dark:text-neutral-600">
+      &middot;
+    </span>
   )
 }
 

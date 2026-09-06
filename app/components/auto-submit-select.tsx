@@ -35,6 +35,7 @@ export function AutoSubmitSelect({
   hidden,
   submitLabel,
   className = '',
+  disabled = false,
 }: {
   id: string
   /** The parameter this select sets. */
@@ -51,6 +52,8 @@ export function AutoSubmitSelect({
   /** Only ever seen with JavaScript disabled. */
   submitLabel: string
   className?: string
+  /** Shown but not yet usable, when an earlier step has to come first. */
+  disabled?: boolean
 }) {
   const router = useRouter()
 
@@ -71,7 +74,11 @@ export function AutoSubmitSelect({
 
       <label
         htmlFor={id}
-        className="block text-xs font-medium text-neutral-600 dark:text-neutral-400"
+        className={`block text-xs font-medium ${
+          disabled
+            ? 'text-neutral-400 dark:text-neutral-600'
+            : 'text-neutral-600 dark:text-neutral-400'
+        }`}
       >
         {label}
       </label>
@@ -80,6 +87,7 @@ export function AutoSubmitSelect({
         id={id}
         name={name}
         defaultValue={value}
+        disabled={disabled}
         onChange={(event) => {
           const chosen = options.find(
             (option) => option.value === event.currentTarget.value
@@ -92,7 +100,7 @@ export function AutoSubmitSelect({
             event.currentTarget.form?.requestSubmit()
           }
         }}
-        className="mt-1 w-full max-w-[22rem] rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500/30 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+        className="mt-1 w-full max-w-[22rem] rounded-md border border-neutral-300 px-2 py-1 text-sm text-neutral-900 focus:border-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500/30 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-600"
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (

@@ -583,13 +583,17 @@ function BandKey({ position }: { position: FieldPosition }) {
           <Term>Flag</Term> how widely owned a player is.
         </p>
         {/* Most owned to least, which is the order the thresholds run in and
-            the order the labels are learned in. */}
-        <dl className="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-x-6">
+            the order the labels are learned in. One band per row: wrapped
+            across the width they broke apart and the descriptions had to be
+            hidden below `lg` to fit, which is most of the point of a legend. */}
+        <dl className="mt-1.5 space-y-1">
           {OWNERSHIP_BANDS.map((band, index) => {
             const upper = index === 0 ? null : OWNERSHIP_BANDS[index - 1].min
             return (
               <div key={band.id} className="flex items-baseline gap-2">
-                <dt className="shrink-0">
+                {/* A fixed width so the four chips line up and the ranges
+                    beside them read as a column. */}
+                <dt className="w-24 shrink-0">
                   <BandChip
                     id={band.id}
                     label={band.label}
@@ -599,11 +603,8 @@ function BandKey({ position }: { position: FieldPosition }) {
                 <dd>
                   <span className="tabular-nums">
                     {upper === null ? `${band.min}%+` : `${band.min}–${upper}%`}
-                  </span>
-                  <span className="hidden lg:inline">
-                    {' '}
-                    &middot; {band.description}
-                  </span>
+                  </span>{' '}
+                  &middot; {band.description}
                 </dd>
               </div>
             )

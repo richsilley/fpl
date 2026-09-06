@@ -96,14 +96,38 @@ const VIEW_QUESTIONS: Record<ViewId, string> = {
   form: "Spot who's delivering and who's on the decline. View the underlying numbers that show a squad's form.",
   ownership:
     "See what your rivals own and build a strategy that fits your objective, whether that's chasing rank or defending a lead.",
-  clubs: 'Who should I buy?',
+  clubs:
+    "Find your next target. Every club ranked by the fixtures ahead and how they're playing.",
 }
 
 /**
  * Views whose subtitle already states the range, so the "Gameweek N onwards"
  * suffix would say it twice.
  */
-const STATES_OWN_RANGE: ReadonlySet<ViewId> = new Set<ViewId>(['fixtures'])
+const STATES_OWN_RANGE: ReadonlySet<ViewId> = new Set<ViewId>([
+  'fixtures',
+  'clubs',
+])
+
+/**
+ * That the fifteen rows are clickable is the least discoverable thing in the
+ * app, and it opens the whole scratch-squad feature (7.7).
+ *
+ * The example names a *different* view on purpose. Saying the list is "ranked
+ * by the view you're in" is abstract until it is contrasted with what the same
+ * list would look like somewhere else, and that contrast is also the argument
+ * for opening the panel from the view you are already reading.
+ *
+ * Teams gets none: its rows are clubs, so there is nothing to replace.
+ */
+const TRANSFER_HINT: Record<ViewId, string | null> = {
+  fixtures:
+    "Click any player to try a replacement. Candidates are ranked by the view you're in, so here you'll see who has the best fixtures ahead, while the Form tab ranks the same players by form instead.",
+  form: "Click any player to try a replacement. Candidates are ranked by the view you're in, so here you'll see who is in the best form, while the Fixtures tab ranks the same players by the fixtures ahead instead.",
+  ownership:
+    "Click any player to try a replacement. Candidates are ranked by the view you're in, so here you'll see them by ownership, while the Fixtures tab ranks the same players by the fixtures ahead instead.",
+  clubs: null,
+}
 
 /**
  * The matrix: fifteen player rows, with the columns changing per view
@@ -374,10 +398,26 @@ async function MatrixSection({
       <div className="mx-auto w-full max-w-[1600px] space-y-5">
         {panel === 'menu' && (
           <AppMenu closeHref={closeOverlayHref}>
-            <MenuSection title="Load a squad">
+            <MenuSection
+              title="Load a squad"
+              hint={
+                <>
+                  Your ID is the number after <code>/entry/</code> in the
+                  address bar on the FPL website. It doesn&rsquo;t appear in the
+                  mobile app.
+                </>
+              }
+            >
               <ManagerIdForm currentId={managerId} />
             </MenuSection>
-            <MenuSection title="View as another manager">
+            {/* "Or load from a league", not "View as another manager": there is
+                no viewing mode to enter or leave, the squad is simply swapped
+                for someone else's, which is the same act as the section above
+                by a different route. */}
+            <MenuSection
+              title="Or load from a league"
+              hint="Loads that manager's squad in place of your own. Your scratch changes are kept and can be reset at any time."
+            >
               {/* Its own boundary: the league list is a cached call, and a slow
                 one must not hold up the drawer that is already open. */}
               <Suspense
@@ -442,6 +482,14 @@ async function MatrixSection({
                   !STATES_OWN_RANGE.has(view) &&
                   ` Gameweek ${data.startGameweek} onwards.`}
               </p>
+              {/* The rows are clickable and nothing on screen said so, which
+                  made the whole scratch-squad feature invisible until found by
+                  accident. Not on Teams: its rows are clubs, not players. */}
+              {TRANSFER_HINT[view] && (
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  {TRANSFER_HINT[view]}
+                </p>
+              )}
             </div>
             {/* Only the two horizon-driven views get these. Showing them on the
               Form view would offer settings that change nothing there. Both
@@ -578,7 +626,7 @@ async function MatrixSection({
 
           {/* The legend explains fixture shading and the Fixture Score, neither
             of which the Form view shows. */}
-          {usesHorizon(view) && <FixturesLegend />}
+          {usesHorizon(view) && <FixturesLegend showOwned={view === 'clubs'} />}
           {view === 'form' && <FormLegend />}
         </section>
       </div>
@@ -683,10 +731,13 @@ async function ReplacementSection({
     <Overlay closeHref={closeHref} label={`Replace ${outgoing.name}`}>
       <ReplacementPanel
         outgoingName={outgoing.name}
-        outgoingClub={outgoing.club}
+        // The full club name, not the three-letter code: this line is prose.
+        outgoingClub={outgoing.clubName}
         outgoingPrice={outgoing.price}
-        position={outgoing.position}
+        position={outgoing.positionName}
+        positionPlural={`${outgoing.positionName}s`}
         rankingLabel={ranking.label}
+        metricLabel={ranking.column}
         available={scratch.budget.available}
         replacements={replacements}
         closeHref={closeHref}

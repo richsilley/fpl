@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+import { OverlayKeys } from '@/app/components/overlay-keys'
+
 /**
  * The floating-panel pattern, shared by the menu drawer, the Ownership
  * population picker and the replacement panel (section 7.8).
@@ -17,19 +19,30 @@ import Link from 'next/link'
  * JavaScript, survives the back button, and cannot get stuck open. Clicking
  * anywhere outside the panel lands on the backdrop and navigates back to the
  * closed URL, which is the dismiss-on-click-away behaviour for free.
+ *
+ * `OverlayKeys` adds Escape and focus return on top, which are the two things
+ * a link cannot express. Every overlay gets them, so all of them dismiss
+ * identically.
+ *
+ * ## Every overlay is centred
+ *
+ * The menu used to be a left drawer while the other two floated in the middle,
+ * which made one settings panel look like a different kind of thing from the
+ * others. `width` is the only axis they differ on now, because their contents
+ * genuinely differ in how much room they need.
  */
 export function Overlay({
   closeHref,
   label,
   children,
-  align = 'centre',
+  width = 'wide',
 }: {
   /** Where the backdrop and the close button navigate to. */
   closeHref: string
   label: string
   children: React.ReactNode
-  /** `drawer` pins to the left edge and fills the height; `centre` floats. */
-  align?: 'centre' | 'drawer'
+  /** `wide` suits a table of candidates; `narrow` a short stack of controls. */
+  width?: 'wide' | 'narrow'
 }) {
   return (
     <div
@@ -38,6 +51,8 @@ export function Overlay({
       aria-label={label}
       className="fixed inset-0 z-50"
     >
+      <OverlayKeys closeHref={closeHref} />
+
       {/* A link, not a div: dismissing by clicking away is then the same
           navigation as pressing Close, with nothing to keep in sync. */}
       <Link
@@ -48,11 +63,9 @@ export function Overlay({
       />
 
       <div
-        className={
-          align === 'drawer'
-            ? 'absolute inset-y-0 left-0 flex w-[min(22rem,88vw)] flex-col overflow-y-auto border-r border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900'
-            : 'absolute left-1/2 top-4 max-h-[calc(100vh-2rem)] w-[min(46rem,94vw)] -translate-x-1/2 overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-2xl sm:top-10 dark:border-neutral-700 dark:bg-neutral-900'
-        }
+        className={`absolute left-1/2 top-4 flex max-h-[calc(100vh-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-2xl sm:top-10 dark:border-neutral-700 dark:bg-neutral-900 ${
+          width === 'narrow' ? 'w-[min(30rem,94vw)]' : 'w-[min(46rem,94vw)]'
+        }`}
       >
         {children}
       </div>

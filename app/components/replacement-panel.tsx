@@ -45,17 +45,25 @@ export function ReplacementPanel({
   outgoingClub,
   outgoingPrice,
   position,
+  positionPlural,
   rankingLabel,
+  metricLabel,
   available,
   replacements,
   closeHref,
 }: {
   outgoingName: string
+  /** Full club name: this is prose, not a column of three-letter codes. */
   outgoingClub: string
   /** In tenths. */
   outgoingPrice: number
+  /** "Goalkeeper", not "GKP". The code belongs in table headings, not here. */
   position: string
+  /** Plural of the above, for "Every goalkeeper in the game". */
+  positionPlural: string
   rankingLabel: string
+  /** The metric's own name, for the column heading: "Fixture Score", "Form". */
+  metricLabel: string
   /** Funds available before this swap, in tenths. */
   available: number
   replacements: (Replacement & { href: string })[]
@@ -79,17 +87,24 @@ export function ReplacementPanel({
 
   return (
     <div className="flex max-h-[calc(100vh-3rem)] flex-col">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
+      {/* Not `flex-wrap`: the description is long enough that wrapping sent
+          Close onto a line of its own below it, which on a phone put the way
+          out halfway down the dialog. The text block wraps instead. */}
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
+        {/* Who is leaving, then their details, then what the list is. Run
+            together on one line the name competed with three attributes of
+            the player being replaced, which is the least important part. */}
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-            Replace {outgoingName}{' '}
-            <span className="font-normal text-neutral-500 dark:text-neutral-400">
-              {outgoingClub} · {position} · {formatPrice(outgoingPrice)}
-            </span>
+            Replace {outgoingName}
           </h3>
           <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-            Every {position} in the game, ranked by {rankingLabel.toLowerCase()}
-            . {formatPrice(available)} available.
+            {outgoingClub} &middot; {position} &middot;{' '}
+            {formatPrice(outgoingPrice)}
+          </p>
+          <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+            Every {position.toLowerCase()} in the game, ranked by{' '}
+            {rankingLabel.toLowerCase()}. {formatPrice(available)} available.
           </p>
         </div>
         <Link
@@ -140,13 +155,19 @@ export function ReplacementPanel({
         <span className="min-w-0 flex-1">Player</span>
         <span className="w-16 shrink-0 text-right">Price</span>
         <span className="w-16 shrink-0 text-right">Change</span>
-        <span className="hidden w-40 shrink-0 text-right sm:block">
-          Ranked by
+        {/* The metric's own name, not "Ranked by": the values underneath
+            already state their units, so a generic heading said nothing the
+            column did not. */}
+        <span className="hidden w-40 shrink-0 truncate text-right sm:block">
+          {metricLabel}
         </span>
         <span className="w-12 shrink-0 text-right">xP</span>
       </div>
 
-      <ul className="divide-y divide-neutral-100 overflow-y-auto dark:divide-neutral-800">
+      {/* `min-h-0` so this is what shrinks when the panel hits its height cap:
+          without it the list keeps its content height and pushes the badge
+          legend off the bottom of the dialog. */}
+      <ul className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto dark:divide-neutral-800">
         {shown.map((row) => (
           <li key={row.id}>
             {/* Already in the squad, so listed and flagged but not selectable.
@@ -201,13 +222,39 @@ export function ReplacementPanel({
 
         {shown.length === 0 && (
           <li className="px-3 py-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-            No {position} matches that.
+            No {positionPlural.toLowerCase()} match that.
             {affordableOnly && ' Try turning off the affordability filter.'}
           </li>
         )}
       </ul>
+
+      {/* The badges appeared on rows with nothing anywhere saying what they
+          meant, and the reason unusable players are listed at all was written
+          down only in the requirements. Both belong under the list. */}
+      <div className="shrink-0 space-y-1.5 border-t border-neutral-200 px-3 py-2.5 text-[11px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <BadgeNote>
+            <Flag tone="neutral">in squad</Flag> already one of your fifteen
+          </BadgeNote>
+          <BadgeNote>
+            <Flag tone="warn">over budget</Flag> costs more than you have
+          </BadgeNote>
+          <BadgeNote>
+            <Flag tone="warn">4th COV</Flag> you already own three from that
+            club
+          </BadgeNote>
+        </div>
+        <p>
+          These players are still listed rather than hidden, because you may be
+          planning to fund the move by selling elsewhere.
+        </p>
+      </div>
     </div>
   )
+}
+
+function BadgeNote({ children }: { children: React.ReactNode }) {
+  return <span className="inline-flex items-center gap-1.5">{children}</span>
 }
 
 /** A selectable row is a link; an unselectable one is the same box, inert. */
