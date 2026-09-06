@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.22; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.23; v1 feature complete).
 
 ## What this is
 
@@ -361,23 +361,31 @@ Rows are the 15 players except where noted.
    stretch cells across the page. Each cell = opponent + H/A, shaded by
    raw FDR. Frozen name column. Blanks = empty cells, doubles = split cells.
    Summary column shows Fixture Score over the §7.6 horizon.
-2. **Form** — "who is playing well / at risk?" **Built, redesigned §7.3.1.**
-   Columns in order: price, GW change, season change, pts, PPG, form, mins,
-   xGI, DefCon. (No xG/xA, no Status/News columns — those were removed.)
+2. **Form** — spot who's delivering and who's on the decline. **Built,
+   redesigned §7.3.1.** Columns in order: price, GW change, season change, pts,
+   PPG, **mins**, form, xGI, DefCon, **xP**. (No xG/xA, no Status/News columns —
+   those were removed.)
 
-   **Only the bar columns get width** (w-20); everything else is sized to its
-   content, Season excepted — it's sized to fit its own header. The table is
-   `w-full` **plus a trailing spacer column**; without the spacer the surplus
-   redistributes and quietly re-widens the slim columns.
+   **Plain figures, then bars.** Pts/PPG/Mins are read one row at a time; the
+   four bar columns are read down, comparing players. Keeping the two kinds
+   apart gives the table one wide block instead of wide and narrow interleaved.
 
-   **Data bars on four columns.** Form and xGI scale to the squad max
-   (comparison); **Mins scales to gameweeks × 90** (reliability — a full bar
-   means every minute played, regardless of squad); **DefCon scales to the
-   player's positional threshold** (10 DEF, 12 MID/FWD), capped so clearing the
-   line fills the bar. Muted single tones, never a red-green scale: 15 players
-   in one squad is a narrow range. One hue per column (sky/grey/violet/cyan) so
-   they read as separate columns. **Anchored left** — right-anchored, short bars
-   hide behind their own number.
+   **Only the bar columns get width**; everything else is sized to its
+   content, Season and Mins excepted — those are sized to fit their own headers.
+   The table is `w-full` **plus a trailing spacer column**; without the spacer
+   the surplus redistributes and quietly re-widens the slim columns.
+
+   **Data bars on four columns: Form, xGI, DefCon, xP.** Form, xGI and xP scale
+   to the squad max (all three ask "which of these fifteen"); **DefCon scales to
+   the player's positional threshold** (10 DEF, 12 MID/FWD), capped so clearing
+   the line fills the bar. Muted single tones, never a red-green scale: 15
+   players in one squad is a narrow range. One hue per column
+   (sky/violet/teal/slate) so they read as separate columns. **Anchored left** —
+   right-anchored, short bars hide behind their own number.
+
+   **Mins is not a bar.** It was, scaled to 90, which made a reliability reading
+   out of a figure the reader mostly wants as a number; it now sits with the
+   plain per-match figures beside PPG and takes the grey that bar gave up.
 
    **DefCon is a proxy, not a prediction** — see `lib/fpl/defcon.ts`. It's a
    threshold stat capped at two points, so a season average can't tell a player
@@ -396,12 +404,14 @@ Rows are the 15 players except where noted.
    **Mins is per match**, divided by that club's **started** fixtures from
    `fixtures/` (blanks and doubles handled; `teams.played` is never
    populated). Both figures must come from payloads of the same age — see the
-   `fixtures` cache note.
+   `fixtures` cache note. Before a club has played, it renders an em dash, not
+   a zero.
 
    **`xP` is FPL's `ep_next`, not ours** — the header says whose it is
-   because a number in our table reads as our number. Far right, ruled off, and
-   **no bar on purpose**: it summarises the columns to its left, so a bar would
-   set it competing with its own inputs. `FormLegend` carries the disclaimer.
+   because a number in our table reads as our number. Far right, ruled off from
+   the bars beside it: the one prediction on a table of measurements. Note that
+   FPL currently sets `ep_next` equal to `form` for ~92% of players, so the two
+   columns look cloned early in a season; they diverge as matches accumulate.
 
    Availability is a dot before the name + tinted row + optional news line, not
    columns. Mapping in `lib/fpl/availability.ts`; unknown codes fail to "out".
@@ -409,7 +419,10 @@ Rows are the 15 players except where noted.
    Zero price change renders empty, not a dash.
 
    Sorting is per-group (XI and bench stay split), ties fall back to squad
-   order, and the Player header is the way back to squad order.
+   order, and the Player header is the way back to squad order. **Every column
+   sorts on the value it displays** — `sortValue` takes `matchesPlayed` because
+   Mins shows a per-match average while `player.minutes` is a season total, and
+   sorting on the total ordered the column by a number that is not in it.
 3. **Ownership** — "is this player worth owning given who else owns them and where
    I sit?" **Built, all three modes.** `compareOwnership()` in
    `lib/fpl/reference.ts` is *the* one function — it takes a population and

@@ -21,7 +21,7 @@ import type { Squad, SquadPlayer } from '@/lib/fpl/squad'
 import { formatPoints, formatPrice, formatPriceChange } from '@/lib/format'
 
 /**
- * View 2, Form (section 7.3). "Who is playing well, and who is at risk?"
+ * View 2, Form (section 7.3). Spot who is delivering and who is on the decline.
  *
  * ## Reading order
  *
@@ -32,8 +32,10 @@ import { formatPoints, formatPrice, formatPriceChange } from '@/lib/format'
  * 1. **The price block** is three columns that belong together, separated from
  *    the performance columns by a rule, with movement coloured by direction
  *    and no-change left blank so the eye lands only on what moved.
- * 2. **Data bars** behind exactly three columns, so the shape of the squad is
- *    readable at a glance without reading a single number.
+ * 2. **Plain figures, then bars.** Pts, PPG and Mins are read one row at a
+ *    time; Form, xGI, DefCon and xP are read down a column, comparing players,
+ *    which is what a bar is for. Keeping the two kinds apart means the table
+ *    has one wide block rather than wide and narrow interleaved.
  * 3. **Availability is a dot and a tinted row**, not two more columns of text.
  *    In a normal week nothing is flagged and the table is quieter for it.
  */
@@ -43,18 +45,18 @@ import { formatPoints, formatPrice, formatPriceChange } from '@/lib/format'
  *
  * The plain numeric columns are sized to their contents and no more, because
  * padding between bare numbers is just distance the eye has to travel. The
- * three bar columns are wider, because there the space *is* the data: a bar
+ * four bar columns are wider, because there the space *is* the data: a bar
  * needs room to be read as a length rather than a stub.
  */
 const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
 const PRICE_COLUMN = 'w-16 min-w-16'
 const TIGHT_COLUMN = 'w-12 min-w-12'
 const SEASON_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
+/** Sized to its own header: "Mins" is wider than the two digits under it. */
+const MINS_COLUMN = 'w-14 min-w-14'
 // Wider than they were: a bar needs room before a high value and a low one
 // look different at a glance, which is the only reason the bars exist.
 const BAR_COLUMN = 'w-28 min-w-28'
-/** Sized to its own header, which is wider than the number under it. */
-const XP_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
 
 export function FormTable({
   squad,
@@ -95,8 +97,8 @@ export function FormTable({
   // Sorting happens inside each group, so the starting XI and the bench stay
   // separated whatever the order. The split is structural (section 7.1), not
   // just a default ordering to be thrown away on the first click.
-  const startingXi = sortPlayers(squad.startingXi, sort)
-  const bench = sortPlayers(squad.bench, sort)
+  const startingXi = sortPlayers(squad.startingXi, sort, matchesPlayed)
+  const bench = sortPlayers(squad.bench, sort, matchesPlayed)
 
   return (
     <div className="relative overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -177,45 +179,37 @@ export function FormTable({
             >
               PPG
             </SortableHeader>
-            {/* Beside the returns it summarises, and before the bars: it is
-                somebody else's conclusion about the columns to its left. */}
+            {/* Mins joins the plain figures rather than the bars. It reads as
+                one of the per-match rates beside PPG, and a bar against the 90
+                available made a reliability reading out of what the reader
+                mostly wants as a number. */}
             <SortableHeader
-              href={sortHref('xp')}
-              active={active.field === 'xp'}
+              href={sortHref('mins')}
+              active={active.field === 'mins'}
               descending={active.descending}
-              className={`border-r ${XP_COLUMN}`}
-              title="FPL's own expected points for the next gameweek. Their model, not this app's"
+              className={`border-r ${MINS_COLUMN}`}
+              title="Average minutes played per match"
             >
-              xP
+              Mins
             </SortableHeader>
 
-            {/* The three bar columns, grouped so the only wide columns in the
-                table sit together rather than being interleaved with tight
-                ones. */}
+            {/* The bar columns, grouped so the only wide columns in the table
+                sit together rather than being interleaved with tight ones. */}
             <SortableHeader
               href={sortHref('form')}
               active={active.field === 'form'}
               descending={active.descending}
               className={BAR_COLUMN}
-              title="Form: average points over recent gameweeks"
+              title="Form: average points over the last 30 days"
             >
               Form
-            </SortableHeader>
-            <SortableHeader
-              href={sortHref('mins')}
-              active={active.field === 'mins'}
-              descending={active.descending}
-              className={BAR_COLUMN}
-              title="Average minutes per match their club has played, against the 90 available"
-            >
-              Mins
             </SortableHeader>
             <SortableHeader
               href={sortHref('xgi')}
               active={active.field === 'xgi'}
               descending={active.descending}
               className={BAR_COLUMN}
-              title="Expected goal involvements"
+              title="Expected goal involvements: expected goals plus expected assists"
             >
               xGI
             </SortableHeader>
@@ -227,6 +221,17 @@ export function FormTable({
               title="Defensive contributions per 90 minutes, against the threshold for the player's position: 10 for a defender, 12 for a midfielder or forward"
             >
               DefCon
+            </SortableHeader>
+            {/* Last, and ruled off from the bars beside it: it is the only
+                prediction on a table of measurements, and somebody else's. */}
+            <SortableHeader
+              href={sortHref('xp')}
+              active={active.field === 'xp'}
+              descending={active.descending}
+              className={`border-l border-l-neutral-200 dark:border-l-neutral-700 ${BAR_COLUMN}`}
+              title="FPL's own expected points for the next gameweek. Their model, not this app's"
+            >
+              xP
             </SortableHeader>
 
             {/* Absorbs the leftover width, exactly as the Fixtures table does.
@@ -283,16 +288,15 @@ export function FormTable({
 /**
  * The denominators the bars are drawn against.
  *
- * Form and xGI are relative to the best in this squad, because the question
- * they answer is comparative. Minutes are not here at all: they are measured
- * per match against the 90 available, which makes that bar a reliability
- * reading rather than a comparison — a player who plays every minute is
- * always full, whoever else is in the squad.
+ * Form, xGI and xP are relative to the best in this squad, because the question
+ * all three answer is comparative: which of these fifteen. DefCon is the
+ * exception and is not here — it runs against the player's own positional
+ * threshold, which is an absolute the squad cannot move.
+ *
+ * Minutes is no longer a bar at all. It sits with the plain per-match figures
+ * beside PPG.
  */
-type BarScales = { maxForm: number; maxXgi: number }
-
-/** Minutes in a match: what the Mins bar is measured against. */
-export const MINUTES_IN_A_MATCH = 90
+type BarScales = { maxForm: number; maxXgi: number; maxXp: number }
 
 function barScales(players: SquadPlayer[]): BarScales {
   return {
@@ -301,10 +305,24 @@ function barScales(players: SquadPlayer[]): BarScales {
       ...players.map((p) => Number(p.expectedGoalInvolvements) || 0),
       0
     ),
+    maxXp: Math.max(...players.map((p) => p.expectedPointsNext || 0), 0),
   }
 }
 
-function sortValue(player: SquadPlayer, field: FormSortField): number {
+/**
+ * `matchesPlayed` is needed because **Mins sorts on what the column shows,
+ * which is minutes per match, not the season total.** Sorting on the total
+ * ordered the column by a number that is not in it: clubs have played
+ * different numbers of matches, so a player on 340 minutes from four games
+ * (85 a match) outranked one on 270 from three (90 a match), and the column
+ * read 90, 85, 70, 90 with the arrow lit. Every other field already sorts on
+ * its displayed value.
+ */
+function sortValue(
+  player: SquadPlayer,
+  field: FormSortField,
+  matchesPlayed: Map<number, number>
+): number {
   switch (field) {
     case 'price':
       return player.price
@@ -318,8 +336,10 @@ function sortValue(player: SquadPlayer, field: FormSortField): number {
       return player.totalPoints
     case 'ppg':
       return Number(player.pointsPerGame) || 0
-    case 'mins':
-      return player.minutes
+    case 'mins': {
+      const matches = matchesPlayed.get(player.teamId) ?? 0
+      return matches === 0 ? 0 : player.minutes / matches
+    }
     case 'xgi':
       return Number(player.expectedGoalInvolvements) || 0
     case 'defcon':
@@ -331,14 +351,19 @@ function sortValue(player: SquadPlayer, field: FormSortField): number {
   }
 }
 
-function sortPlayers(players: SquadPlayer[], sort: FormSort): SquadPlayer[] {
+function sortPlayers(
+  players: SquadPlayer[],
+  sort: FormSort,
+  matchesPlayed: Map<number, number>
+): SquadPlayer[] {
   const { field, descending } = splitFormSort(sort)
   if (field === 'squad') {
     return [...players].sort((a, b) => a.squadPosition - b.squadPosition)
   }
 
   return [...players].sort((a, b) => {
-    const difference = sortValue(a, field) - sortValue(b, field)
+    const difference =
+      sortValue(a, field, matchesPlayed) - sortValue(b, field, matchesPlayed)
     // Ties fall back to squad order, so equal values keep a stable, meaningful
     // order rather than whatever the sort happens to do.
     return difference !== 0
@@ -434,8 +459,8 @@ function PlayerRow({
       <NumericCell background={rowBackground} width={TIGHT_COLUMN}>
         {player.pointsPerGame}
       </NumericCell>
-      <NumericCell background={rowBackground} width={XP_COLUMN} edge>
-        {player.expectedPointsNext.toFixed(1)}
+      <NumericCell background={rowBackground} width={MINS_COLUMN} edge>
+        {matchesPlayed === 0 ? <NoMatches /> : Math.round(minutesPerMatch)}
       </NumericCell>
 
       {/* The bar columns keep their numbers right-aligned. Centring them would
@@ -449,15 +474,6 @@ function PlayerRow({
         barTone={BAR_TONE.form}
       >
         {player.form}
-      </NumericCell>
-      <NumericCell
-        background={rowBackground}
-        width={BAR_COLUMN}
-        align="right"
-        bar={ratio(minutesPerMatch, MINUTES_IN_A_MATCH)}
-        barTone={BAR_TONE.mins}
-      >
-        {matchesPlayed === 0 ? <NotApplicable /> : Math.round(minutesPerMatch)}
       </NumericCell>
       <NumericCell
         background={rowBackground}
@@ -487,6 +503,16 @@ function PlayerRow({
           formatDefcon(player.defensiveContributionPer90)
         )}
       </NumericCell>
+      <NumericCell
+        background={rowBackground}
+        width={BAR_COLUMN}
+        align="right"
+        bar={ratio(player.expectedPointsNext, scales.maxXp)}
+        barTone={BAR_TONE.xp}
+        edgeLeft
+      >
+        {player.expectedPointsNext.toFixed(1)}
+      </NumericCell>
 
       {/* Matches the spacer in the header. */}
       <td
@@ -506,6 +532,23 @@ function NotApplicable() {
     >
       <span aria-hidden>—</span>
       <span className="sr-only">not applicable</span>
+    </span>
+  )
+}
+
+/**
+ * Minutes per match before the club has played any: a division with no
+ * denominator, so there is no average yet. A zero would read as a player who
+ * never gets on the pitch.
+ */
+function NoMatches() {
+  return (
+    <span
+      title="No matches played yet"
+      className="text-neutral-300 dark:text-neutral-600"
+    >
+      <span aria-hidden>&mdash;</span>
+      <span className="sr-only">no matches played yet</span>
     </span>
   )
 }
@@ -588,15 +631,19 @@ function NumericCell({
  *
  * They were too close to each other to tell apart, which defeated the point of
  * giving each column its own. These four are one step stronger and spread
- * around the wheel: blue, grey, purple, teal. Teal sits next to green, which
+ * around the wheel: blue, purple, teal, grey. Teal sits next to green, which
  * is safe here because DefCon is the one bar where a full length really does
  * mean good — clearing the threshold.
+ *
+ * xP takes the grey that Mins gave up when it stopped being a bar. The quietest
+ * tone suits the one column that is a prediction rather than a measurement,
+ * and somebody else's at that.
  */
 const BAR_TONE = {
   form: 'bg-sky-400/55 dark:bg-sky-500/40',
-  mins: 'bg-slate-400/45 dark:bg-slate-400/30',
   xgi: 'bg-violet-400/50 dark:bg-violet-500/40',
   defcon: 'bg-teal-400/55 dark:bg-teal-500/40',
+  xp: 'bg-slate-400/45 dark:bg-slate-400/30',
 } as const
 
 /**

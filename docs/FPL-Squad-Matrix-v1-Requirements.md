@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.22
+**Version:** 1.23
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -445,7 +445,9 @@ It is roughly half its former length. The removed material explained that a fixt
 
 **Question answered:** who is playing well, and who is at risk?
 
-Columns, in order: price, price change this gameweek, price change since season start, total points, points per game, form, minutes, expected goal involvements, defensive contribution per 90, and FPL's expected points for the next gameweek.
+**On screen the view is titled "Form", with the subtitle "Spot who's delivering and who's on the decline. View the underlying numbers that show a squad's form."** As on Fixtures (7.2), the question above is what the view is for, not what it says to the reader.
+
+Columns, in order: price, price change this gameweek, price change since season start, total points, points per game, minutes, form, expected goal involvements, defensive contribution per 90, and FPL's expected points for the next gameweek.
 
 Availability should be visually obvious. Red for out, amber for doubtful with the percentage chance shown, no flag for available.
 
@@ -457,15 +459,23 @@ Every column here is a number, and presented flat they read as a wall of them. T
 
 **No change renders as an empty cell, not a dash.** Most players have not moved in a given week, and a column of placeholders hides the handful of rows that did.
 
-**Column order:** Availability, Price, GW, Season, Pts, PPG, xP, Form, Mins, xGI, DefCon. The bar columns are grouped at the end so the only wide columns sit together rather than being interleaved with tight ones. xP sits with the returns it summarises, before the bars.
+**Column order:** Availability, Price, GW, Season, Pts, PPG, Mins, Form, xGI, DefCon, xP. The bar columns are grouped at the end so the only wide columns sit together rather than being interleaved with tight ones.
+
+**Plain figures first, bars last.** Pts, PPG and Mins are read one row at a time — what has this player done. Form, xGI, DefCon and xP are read down a column, comparing players, which is the only thing a bar is for. Sorting the columns by which way they are read is what keeps the table to one wide block rather than wide and narrow alternating.
+
+**Mins is a plain number, beside PPG.** It carried a bar scaled to the 90 minutes available, which made a reliability reading out of a figure the reader mostly wants as a rate, and put a wide column in the middle of the tight ones. It reads naturally next to PPG: both are per-match averages.
+
+**xP is last, and has a bar.** It ends the row because it is the one prediction on a table of measurements, and it is ruled off from the bars beside it for the same reason. It is a bar because the question asked of it — which of these fifteen is expected to score best next week — is the comparative one every other bar answers.
 
 **Availability sits inside the player cell, after the club: name, club, dot.** It had a column of its own for a while, which reads well on a laptop and badly on a phone: a column costs a fixed slice of width in the frozen cell that is already the widest thing on screen, and in a normal week all fifteen are green — a column's worth of space to say nothing is wrong.
 
 A dot is small enough to sit beside the name and still be the only coloured thing in the cell, which is what makes an exception findable. Green available, amber doubtful, red out. **Nothing is lost by shrinking the marker**: the reason and the chance of playing are on the news line below the name, and the title and screen-reader text always carry the state in words, so colour never carries it alone.
 
-**Mins is minutes per match, not the season total.** A total becomes abstract the moment clubs have played different numbers of matches, which blanks and doubles guarantee. The denominator is that club's **started** fixtures counted from `fixtures/`, which is right through blanks and doubles; the `teams` array's own `played` is never populated. The bar runs against the 90 available rather than against the squad, so a full bar means every minute played.
+**Mins is minutes per match, not the season total.** A total becomes abstract the moment clubs have played different numbers of matches, which blanks and doubles guarantee. The denominator is that club's **started** fixtures counted from `fixtures/`, which is right through blanks and doubles; the `teams` array's own `played` is never populated. Before a club has played at all there is no average, and the cell shows an em dash rather than a zero.
 
-**The bar hues are one step stronger than they were, and spread further apart**: blue, grey, purple, teal. Four columns need four that separate at a glance, and the earlier pastels were too close to tell apart, which defeated the point of giving each column its own.
+**Every column sorts on the value it displays.** Mins was the exception and it was a defect: it sorted on `player.minutes`, a season total, while the column shows a per-match average. Because clubs have played different numbers of matches, the two orders differ — a player on 340 minutes from four games (85 a match) outranked one on 270 from three (90 a match), so the column read 90, 85, 70, 90 with the sort arrow lit. The sort therefore needs the same matches-played denominator the cell uses.
+
+**The bar hues are one step stronger than they were, and spread further apart**: blue, purple, teal, grey. Four columns need four that separate at a glance, and the earlier pastels were too close to tell apart, which defeated the point of giving each column its own.
 
 **Alignment.** Every header except Player is centred, and every data cell is centred except Player and the bar columns. The bar columns keep their numbers right-aligned: centring one would set it adrift from the end of its own bar, which is the one place in the table where a value has a length to sit against.
 
@@ -473,7 +483,7 @@ A dot is small enough to sit beside the name and still be the only coloured thin
 
 **Widths are deliberately uneven, and that is the compaction rule.** The plain numeric columns are sized to their contents and no wider, because padding between bare numbers is only distance for the eye to travel. The bar columns are wider, because there the space *is* the data: a bar needs room to read as a length. **Only the bar columns carry whitespace.** Season is the one exception among the tight columns: it is sized to fit its own header, because a truncated heading is not compaction.
 
-**Data bars behind four columns:** Form, Minutes, xGI and DefCon. Not the others. The number stays fully legible on top.
+**Data bars behind four columns:** Form, xGI, DefCon and xP. Not the others. The number stays fully legible on top.
 
 **Bars are anchored left, not right.** Anchored right, a short bar sits entirely behind its own right-aligned number and disappears, so the smallest values — the ones most worth spotting — showed nothing at all. From the left, every value has a visible length.
 
@@ -485,8 +495,7 @@ The scales differ, and the difference is the point:
 
 | Bar | Drawn against | Reads as |
 |---|---|---|
-| Form, xGI | The highest value in that column across the fifteen | A comparison within the squad |
-| Minutes | Minutes *available*, gameweeks played × 90 | Reliability. A player who has played every minute is always full, whoever else is in the squad |
+| Form, xGI, xP | The highest value in that column across the fifteen | A comparison within the squad |
 | DefCon | The player's own positional threshold | Progress towards the two points, not a comparison with team-mates |
 
 **xGI and DefCon are an em dash for goalkeepers,** not `0.00`. A zero reads as a bad value; a dash correctly reads as not applicable.
@@ -523,15 +532,23 @@ This view has no horizon and no Fixture Score, so the horizon control (7.6) and 
 
 #### 7.3.3 xP (FPL)
 
-FPL's own expected points for the next gameweek, from `ep_next`. **Not this app's number**, and the header says so: `xP (FPL)`, not `xP`. A figure sitting in this app's table is naturally read as this app's figure, and this one is a third party's prediction.
+FPL's own expected points for the next gameweek, from `ep_next`. **Not this app's number.** A figure sitting in this app's table is naturally read as this app's figure, and this one is a third party's prediction. The header is `xP`; the legend and the header tooltip say whose it is, which the column heading itself was carrying as `xP (FPL)` before the legend defined every column.
 
-Far right, past the bar columns and ruled off from them.
+Far right, ruled off from the bar columns beside it: the one prediction on a table of measurements.
 
-**No data bar, deliberately.** Every bar to its left is an input the reader weighs for themselves. This is FPL's summary of those same inputs, so a bar would set it competing with the columns it is derived from instead of reading as a conclusion drawn after them.
+**It has a data bar**, scaled to the squad maximum like Form and xGI. The question asked of it is the comparative one — which of these fifteen is expected to score best next week — and that is what a bar answers. It carries the quietest of the four hues.
 
 Sortable like the other numeric columns.
 
-**The legend says whose number it is.** The Form view had no legend before this column; it has one now, because the disclaimer has to live somewhere a reader will find it without hovering a header.
+**Expect it to duplicate Form early in a season.** FPL currently returns `ep_next` exactly equal to `form` for about 92% of players, so the two columns can look cloned. That is upstream behaviour, not a wiring fault, and the two separate as matches accumulate. Do not "fix" it by re-deriving the number.
+
+#### 7.3.4 The legend
+
+Below the table. **It defines every column, in table order, and argues for none of them**: Availability, Price, GW, Season, Pts, PPG, Mins, Form, xGI, DefCon, xP.
+
+It previously explained three things and justified the rest — why xP had no bar, why the bars used different denominators, why availability was a dot. That is design reasoning: it belongs in this document and in the code, not on the page. A reader looking at "DefCon 8.4" wants to know what it counts, not why it is drawn the way it is.
+
+Three columns on a wide screen, one on a phone. Eleven short definitions in a single stack is a long scroll past the table they describe.
 
 ### 7.4 View 3 — Ownership
 

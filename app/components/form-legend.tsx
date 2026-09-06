@@ -1,48 +1,73 @@
 /**
- * A short note under the Form table (section 7.3).
+ * What every column on the Form table means (section 7.3).
  *
- * The view had no legend, and most of it needs none: the columns are labelled
- * and the bars are self-evident once you know they are bars. The xP column is
- * the exception, because a number in this app's table is naturally read as
- * this app's number, and that one is not. Saying so is the whole reason this
- * exists, and the bar scales ride along because the box is already there.
+ * It used to explain three things and justify the rest: why xP has no bar, why
+ * the bars use different denominators, why availability is a dot. That is
+ * design reasoning, which belongs in the code and the requirements — a reader
+ * looking at "DefCon 8.4" wants to know what it counts, not why it is drawn
+ * the way it is. So it now defines every column, in table order, and argues
+ * for none of them.
  */
 export function FormLegend() {
   return (
     <div className="rounded-lg border border-neutral-200 px-4 py-3 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
-      <p className="max-w-prose">
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">
-          xP (FPL) is Fantasy Premier League&rsquo;s own expected points for the
-          next gameweek, not this app&rsquo;s.
-        </span>{' '}
-        It is their model&rsquo;s summary of the columns to its left, so it gets
-        no bar: it is a conclusion drawn from them rather than another input
-        competing with them. Everything else on this table is measured, not
-        predicted.
-      </p>
-      <p className="mt-2 max-w-prose">
-        The bars are scaled differently on purpose.{' '}
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">
-          Form
-        </span>{' '}
-        and{' '}
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">
-          xGI
-        </span>{' '}
-        run against the highest in this squad, so they compare these fifteen
-        players.{' '}
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">
-          Mins
-        </span>{' '}
-        runs against the minutes available, so a full bar means every minute
-        played whoever else is in the squad.{' '}
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">
-          DefCon
-        </span>{' '}
-        runs against the player&rsquo;s own threshold for the two defensive
-        contribution points, 10 for a defender and 12 for a midfielder or
-        forward, so a full bar means they clear it on average.
-      </p>
+      {/* Three columns on a wide screen, one on a phone. Twelve short
+          definitions in a single stack is a long scroll past the table they
+          describe. */}
+      <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+        <Entry term="Availability">
+          the dot beside each name. Green is fit, amber is doubtful, red is out.
+          Team news appears under the name when there is any.
+        </Entry>
+        <Entry term="Price">
+          current price. Rises and falls as managers buy and sell.
+        </Entry>
+        <Entry term="GW">
+          price change this gameweek. Blank means no movement.
+        </Entry>
+        <Entry term="Season">
+          price change since the season started. Your profit or loss on that
+          player.
+        </Entry>
+        <Entry term="Pts">total points this season.</Entry>
+        <Entry term="PPG">
+          points per game. Season points divided by matches played.
+        </Entry>
+        <Entry term="Mins">average minutes played per match.</Entry>
+        <Entry term="Form">average points over the last 30 days.</Entry>
+        <Entry term="xGI">
+          expected goal involvements, so expected goals plus expected assists.
+        </Entry>
+        <Entry term="DefCon">
+          defensive contributions per 90. A defender needs 10 in a match to earn
+          the two points, a midfielder or forward needs 12.
+        </Entry>
+        <Entry term="xP">
+          Fantasy Premier League&rsquo;s own expected points for the next
+          gameweek.
+        </Entry>
+      </dl>
+    </div>
+  )
+}
+
+/**
+ * One definition. The term and its text run on as a single line so the pair
+ * reads as a sentence rather than as two columns to look across.
+ */
+function Entry({
+  term,
+  children,
+}: {
+  term: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <dt className="inline font-medium text-neutral-700 dark:text-neutral-300">
+        {term}
+      </dt>{' '}
+      <dd className="inline">&mdash; {children}</dd>
     </div>
   )
 }

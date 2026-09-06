@@ -93,7 +93,7 @@ export const maxDuration = 60
 const VIEW_QUESTIONS: Record<ViewId, string> = {
   fixtures:
     "Plan around what's ahead. See every player's fixture difficulty from the current gameweek to the end of the season.",
-  form: 'Who is playing well, and who is at risk?',
+  form: "Spot who's delivering and who's on the decline. View the underlying numbers that show a squad's form.",
   ownership:
     'Is this player worth owning, given who else owns them and where I sit?',
   clubs: 'Who should I buy?',
