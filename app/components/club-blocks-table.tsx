@@ -36,9 +36,21 @@ import {
  * view. Same trade as the Fixtures view makes with its summary column.
  */
 const CLUB_COLUMN = 'w-[9.5rem] min-w-[9.5rem] sm:w-52 sm:min-w-52'
-const SCORE_COLUMN = 'hidden sm:table-cell w-24 min-w-24'
-const STRENGTH_COLUMN = 'hidden sm:table-cell w-28 min-w-28'
-const OWNED_COLUMN = 'hidden sm:table-cell w-56 min-w-56'
+/**
+ * These are real columns at every width, phones included.
+ *
+ * They used to collapse below `sm` into a row of bare badges under the club
+ * name. That left three numbers with no headings — unreadable unless you
+ * already knew what they were — and worse, it took the sort with it: the
+ * headers were the only way to reorder the table, so the view lost its one
+ * interaction on the device where scanning twenty rows needs it most.
+ *
+ * The table already scrolls sideways behind a frozen first column, which is
+ * the pattern every other view uses. Columns simply join that scroll.
+ */
+const SCORE_COLUMN = 'w-24 min-w-24'
+const STRENGTH_COLUMN = 'w-28 min-w-28'
+const OWNED_COLUMN = 'w-56 min-w-56'
 /**
  * Gameweek columns are sized to the number on show, matching the Fixtures
  * view: a short horizon leaves room to breathe, a long one packs down so more
@@ -203,14 +215,6 @@ function ClubRow({
           <span className="shrink-0 text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
             {block.shortName}
           </span>
-        </span>
-        {/* Below sm the score and owned columns are hidden, so they ride
-            along here instead. Names are dropped at this width; the count is
-            what surfaces the three-per-club limit. */}
-        <span className="mt-0.5 flex items-center gap-1.5 sm:hidden">
-          <ScoreBadge summary={block.score} compact />
-          <StrengthBadge value={block.teamStrength} compact />
-          {owned > 0 && <OwnedBadge count={owned} atLimit={atLimit} />}
         </span>
       </th>
 

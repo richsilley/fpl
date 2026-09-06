@@ -42,11 +42,15 @@ export function usesHorizon(view: ViewId): boolean {
   return HORIZON_VIEWS.includes(view)
 }
 
+/**
+ * The `clubs` id stays as it is: it is in every shared link, and renaming a
+ * URL parameter to match a label would break them for nothing.
+ */
 export const VIEW_LABELS: Record<ViewId, string> = {
   fixtures: 'Fixtures',
   form: 'Form',
   ownership: 'Ownership',
-  clubs: 'Club Blocks',
+  clubs: 'Teams',
 }
 
 export function parseView(value: string | undefined): ViewId {

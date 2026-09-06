@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.19; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.20; v1 feature complete).
 
 ## What this is
 
@@ -135,6 +135,12 @@ borrowed manager's. Both fetches are cached and both degrade to "no picker"
 rather than an error page. The error path keeps its own "Back to my team" link,
 or a rival whose squad won't load strands the reader.
 
+**Score and strength columns are real columns at every width.** They used to
+collapse below `sm` into bare badges under the name — three numbers with no
+headings, and on Teams it killed the sort, since the headers are the only way
+to reorder. The tables already scroll sideways behind a frozen first column;
+these join that scroll. Do not reintroduce `hidden sm:table-cell` here.
+
 **All three fifteen-row tables share their geometry** via
 `app/components/table-metrics.ts`: header height, row height, frozen player
 column width, and the sticky offset for anything pinned beside it. Switching
@@ -246,7 +252,7 @@ load-bearing:
 | `squad.ts` | `loadSquad()` → the fifteen-row set |
 | `views.ts` | `loadMatrixData()` → what every view is built from |
 | `fixtures.ts` | fixture index + Fixture Score |
-| `clubs.ts` | Club Blocks rows + sorting |
+| `clubs.ts` | Teams rows + sorting |
 | `reference.ts` | Ownership populations, `compareOwnership()`, `leagueMembers()` |
 | `concurrency.ts` | the bounded fan-out for league mode |
 | `http.ts` | route-handler helpers |
@@ -279,7 +285,7 @@ finished one, so there's no moment to act on.
 ## One loader for all views
 
 `loadMatrixData()` in `lib/fpl/views.ts` returns squad + fixture index + teams
-+ columns + totalPlayers. **Fixtures and Club Blocks share one fixture index**,
++ columns + totalPlayers. **Fixtures and Teams share one fixture index**,
 so they can't disagree about a score — a club reading 6.4 in one and 6.0 in the
 other would be a visible bug. Add view-specific shaping in its own module
 (`clubs.ts`, `reference.ts`), not in the loader.
@@ -287,14 +293,14 @@ other would be a visible bug. Add view-specific shaping in its own module
 Shared cell/badge rendering and both colour scales live in
 `app/components/fixture-visuals.tsx`. Don't re-implement per view.
 
-## Horizon control (§7.6) — Fixtures and Club Blocks only
+## Horizon control (§7.6) — Fixtures and Teams only
 
 `app/components/horizon-selector.tsx`. Presets **1/3/5/7/All** plus a numeric
 input taking any integer from 1 to gameweeks remaining. "All" resolves to
 the remaining gameweeks — it is a normal horizon value, not a special case. Out-of-range values
 **clamp, never error** (`parseHorizon` → floor/1/38, then `clampHorizon` →
 season remainder). Reads/writes one `horizon` URL param so it survives a view
-switch — reuse this component in Club Blocks, don't fork it.
+switch — reuse this component in Teams, don't fork it.
 
 **Still the only Client Component in the app.** §7.6 wants the preset highlight to
 follow what's *typed*, before submit, which is browser-only state. It degrades:
@@ -343,11 +349,11 @@ Rows are the 15 players except where noted.
    Headers are centred except Player; data is centred except Player and the bar
    columns, whose numbers stay right-aligned against the end of their own bar.
 
-   **Availability is a column**, second and frozen, exactly where Fixtures
-   puts Fixture Score and the same width — that is what makes the two tables
-   line up. Drawn as a bar, and **available is a faint grey rule, not green**:
-   in a normal week all fifteen are fit and a column of green would shout the
-   least useful thing on the table.
+   **Availability is a dot inside the player cell** — name, club, dot. It had
+   its own column, which reads well on a laptop and badly on a phone: a fixed
+   slice of the frozen cell to say "nothing is wrong" in a week when all
+   fifteen are green. The reason and the chance are on the news line below, and
+   the title carries the state in words, so colour is never alone.
 
    **Mins is per match**, divided by that club's **started** fixtures from
    `fixtures/` (blanks and doubles handled; `teams.played` is never
@@ -408,7 +414,9 @@ Rows are the 15 players except where noted.
 
    Direction still lives in one guidance line above the table, never per player
    (§7.4). Denominator is `total_players`; median split; null rank → unknown.
-4. **Club Blocks** — "who should I buy?" **Built.** The deliberate exception:
+4. **Teams** — "who should I buy?" **Built.** Labelled *Teams*; the URL value
+   stays `view=clubs`, because it is in every shared link. The deliberate
+   exception:
    rows are the **20 clubs**, not the 15 players. Fixture Score over the §7.6
    horizon, sortable (default highest first). Owned count per club with an
    amber "3 max" badge at the three-per-club limit. **Columns, headers and
@@ -420,7 +428,7 @@ Build order: all seven steps complete. Remaining work is v2 (§10).
 ## Fixture Score
 
 A single number for how good a run of fixtures is. Used in the Fixtures summary
-column and as the only metric in Club Blocks. **Higher is better.**
+column and as the only metric in Teams. **Higher is better.**
 Normalised to 0–10 as of requirements v1.7.
 
 ```
@@ -470,7 +478,9 @@ Team Strength column beside it would both carry team quality and the row would
 count it twice. This is why a rating is a **pair** — `{ colour, score }` — so
 the split is structural and cannot be lost by reading the wrong field.
 **Team Strength is always ours, even in `fpl` mode**, since FPL publishes
-nothing form-aware; the column is labelled *(ours)* for that reason.
+nothing form-aware. **Both horizon views carry the column** — Fixtures against
+each player's club, Teams against the club row. On Fixtures it is not frozen:
+two pinned columns leave a phone no room to scroll the gameweeks.
 
 **Two-stage shrinkage**, all constants named at the top of the file, never
 inlined:

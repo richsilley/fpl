@@ -1,4 +1,8 @@
-import { FixtureCell, ScoreBadge } from '@/app/components/fixture-visuals'
+import {
+  FixtureCell,
+  ScoreBadge,
+  scoreTone,
+} from '@/app/components/fixture-visuals'
 import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
 import {
   MATRIX_HEADER_HEIGHT,
@@ -24,6 +28,8 @@ import type { MatrixData } from '@/lib/fpl/views'
 /** Cell widths, so the header and body columns line up as one grid. */
 const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
 const SCORE_COLUMN = 'w-24 min-w-24'
+/** Same width and scale as the Teams view's, so the two read alike. */
+const STRENGTH_COLUMN = 'w-28 min-w-28'
 
 /**
  * Gameweek columns are sized to the number on show. A short horizon leaves
@@ -82,12 +88,19 @@ export function FixturesTable({
             </th>
             <th
               scope="col"
-              className={`sticky z-20 hidden border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 sm:table-cell dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
+              className={`sticky z-20 border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
             >
               {/* Section 6.4: labelled Fixture Score, never FDR. */}
               <span title="Sum of 6 minus difficulty across the horizon, then the number of fixtures. Higher is better.">
                 Fixture Score
               </span>
+            </th>
+            <th
+              scope="col"
+              title="How strong the player's club is right now, on the same 0 to 10 scale as Fixture Score. Always this app's figure — FPL publishes no form-aware strength, so it does not change with the difficulty toggle"
+              className={`border-b border-l border-neutral-100 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 dark:border-neutral-800/70 dark:bg-neutral-800 dark:text-neutral-300 ${STRENGTH_COLUMN}`}
+            >
+              Team Strength
             </th>
             {columns.map((gameweek) => (
               <th
@@ -127,7 +140,7 @@ export function FixturesTable({
           <tr>
             <th
               scope="colgroup"
-              colSpan={columns.length + 3}
+              colSpan={columns.length + 4}
               className="sticky left-0 border-y border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/70 dark:text-neutral-400"
             >
               Bench
@@ -149,6 +162,24 @@ export function FixturesTable({
         </tbody>
       </table>
     </div>
+  )
+}
+
+/**
+ * Team Strength on the same 0 to 10 scale and colour bands as Fixture Score,
+ * so the pair reads as one thought. Identical to the Teams view's, because a
+ * club reading 7.9 there and something else here would be a bug the reader
+ * could see.
+ */
+function StrengthBadge({ value }: { value: number }) {
+  return (
+    <span
+      title={`Team Strength ${value.toFixed(1)} of 10`}
+      className={`inline-flex items-baseline rounded px-1.5 py-0.5 text-sm tabular-nums ${scoreTone(value)}`}
+    >
+      <span className="font-semibold">{value.toFixed(1)}</span>
+      <span className="sr-only"> team strength out of 10</span>
+    </span>
   )
 }
 
@@ -194,17 +225,23 @@ function PlayerRow({
             {player.club}
           </span>
         </span>
-        {/* Below the sm breakpoint the score column is hidden to leave room
-            for gameweeks, so the score rides along with the name instead. */}
-        <span className="mt-0.5 flex sm:hidden">
-          <ScoreBadge summary={summary} compact />
-        </span>
       </th>
 
       <td
-        className={`sticky z-10 hidden border-b border-r border-neutral-200 px-2 py-1.5 text-right sm:table-cell dark:border-neutral-800 ${rowBackground} ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
+        className={`sticky z-10 border-b border-r border-neutral-200 px-2 py-1.5 text-right dark:border-neutral-800 ${rowBackground} ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
       >
         <ScoreBadge summary={summary} />
+      </td>
+
+      {/* Team Strength, as the Teams view shows it: how good the run is, and
+          how good the club is, are two different questions and a fixture score
+          means something different against a strong side than a weak one. Not
+          frozen — two pinned columns leave a phone almost no room to scroll
+          the gameweeks. */}
+      <td
+        className={`border-b border-l border-neutral-100 px-2 py-1.5 text-right dark:border-neutral-800/70 ${rowBackground} ${STRENGTH_COLUMN}`}
+      >
+        <StrengthBadge value={view.teamStrength.get(player.teamId) ?? 0} />
       </td>
 
       {columns.map((gameweek) => (

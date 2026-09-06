@@ -143,21 +143,22 @@ export function SquadHeader({
 /**
  * The way into the menu, which holds the manager ID form and the view-as
  * picker. Always beside the team name, so it travels with the sticky bar.
+ *
+ * Shaped like the Ownership view's "Compare against" button rather than a
+ * hamburger: both open a panel of settings over the page, and two different
+ * shapes for one idea made the app look like two apps.
  */
 function MenuButton({ href }: { href: string }) {
   return (
     <Link
       href={href}
       scroll={false}
-      aria-label="Open menu"
-      className="inline-flex shrink-0 items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+      className="inline-flex shrink-0 items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
     >
-      <span aria-hidden className="flex flex-col gap-[3px]">
-        <span className="block h-[2px] w-4 bg-current" />
-        <span className="block h-[2px] w-4 bg-current" />
-        <span className="block h-[2px] w-4 bg-current" />
+      <span className="font-semibold">Configure</span>
+      <span aria-hidden className="text-[10px]">
+        &#9662;
       </span>
-      <span className="hidden sm:inline">Menu</span>
     </Link>
   )
 }

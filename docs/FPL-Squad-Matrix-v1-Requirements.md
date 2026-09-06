@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.19
+**Version:** 1.20
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -39,7 +39,7 @@ Explicitly excluded, with reasoning:
 
 **Views change the columns.** Four views in v1, three of which use the fifteen-player row set.
 
-The one deliberate exception is the Club Blocks view, which uses twenty club rows instead. It earns the exception because it answers "who should I buy," which a fifteen-player matrix structurally cannot.
+The one deliberate exception is the Teams view, which uses twenty club rows instead. It earns the exception because it answers "who should I buy," which a fifteen-player matrix structurally cannot.
 
 ## 5. Data sources
 
@@ -130,7 +130,7 @@ Revisit when `use cache` has a free durable path on Vercel. Until then this is t
 
 ## 6. Fixture Score
 
-A single number expressing how good a run of fixtures is. Used in the Fixtures view summary column and as the sole metric in the Club Blocks view.
+A single number expressing how good a run of fixtures is. Used in the Fixtures view summary column and as the sole metric in the Teams view.
 
 ### 6.1 Definition
 
@@ -196,7 +196,7 @@ Colour logic must stay consistent across the app: green means good everywhere. I
 
 Normalisation is what makes fixed thresholds possible: the score no longer scales with the horizon, so a band means the same thing at a horizon of 1 as at 10. The anchors are deliberate — a whole horizon of FDR 2 scores 8.0 and lands in the top band, a whole horizon of FDR 4 scores 4.0 and lands in the bottom one. Scores above 10 from a double gameweek fall in the top band and are not capped.
 
-Both views must use one implementation of these scales. A club reading green in the Fixtures view and neutral in Club Blocks is a bug the user can see.
+Both views must use one implementation of these scales. A club reading green in the Fixtures view and neutral in Teams is a bug the user can see.
 
 Expect the summary column to look mostly neutral at long horizons. Averaging over ten gameweeks genuinely compresses the spread, and most squads do have average fixture runs. This is honest rather than a fault to tune away.
 
@@ -325,13 +325,17 @@ Three consequences, all expected:
 2. **A club far from average moves as a block.** Arsenal and Manchester City, at the top of the scale, have every one of their 34 cells move down. Coventry, at the bottom, has every cell move up.
 3. **A club near average does not, and cannot.** The shift depends on the *sum* of both terms, so for a club at `ownFDR ≈ 3` the own term vanishes and only the compression by `1 / (1 + ALPHA)` is left, which pulls easy fixtures up and hard fixtures down. Mid-table rows therefore show cells moving both ways. **This is the formula behaving correctly, not a defect**: the mean shift is still in the right direction (Chelsea −0.29, Crystal Palace +0.36), and the ordering within the row is untouched.
 
-#### Club Blocks: Team Strength
+#### Team Strength
 
 ```
 teamStrength = 10 x (strength[club] - min) / (max - min)
 ```
 
 Immediately right of Fixture Score, on the same 0 to 10 scale with the same colour bands, so the two read as a pair: how good the run is, and how good the club is. An easy run for a weak side is a different proposition from an easy run for a strong one. Sortable, one decimal place.
+
+**Both horizon views carry it**, on the Fixtures view against each player's club. The pair answers one question, and it would be odd for the answer to be available on one of the two views that ask it. On Fixtures it is not frozen — two pinned columns leave a phone almost no room to scroll the gameweeks — so Fixture Score stays with the name and Team Strength is the first column to scroll.
+
+**These are real columns at every width, phones included.** They used to collapse below the `sm` breakpoint into a row of bare badges under the club name. That left three numbers with no headings, unreadable unless you already knew what they were, and it took the sort with it: the headers are the only way to reorder the table, so the view lost its one interaction on the device where scanning twenty rows needs it most. The table already scrolls sideways behind a frozen first column, which is the pattern every other view uses; these columns simply join that scroll.
 
 #### Matrix cells
 
@@ -405,7 +409,7 @@ The control is a two-step cascade — **View as → from league → team** — a
 
 **Column widths scale to the number on show,** so a one-gameweek view is not a single hairline column and a full-season view still fits a useful stretch on screen. A trailing spacer column absorbs any width left over, which keeps the real columns at their intended size rather than stretching them across the page at short horizons.
 
-**Club Blocks does the same** (7.5). Both views treat the shared horizon identically, so switching between them changes the rows and the columns stay put.
+**Teams does the same** (7.5). Both views treat the shared horizon identically, so switching between them changes the rows and the columns stay put.
 
 **Below the `sm` breakpoint the summary column is hidden** and the score moves under the player name instead. Kept as a column it consumes most of a phone's width and no fixtures are visible at all, which defeats the view. See 8.5.
 
@@ -427,9 +431,9 @@ Every column here is a number, and presented flat they read as a wall of them. T
 
 **Column order:** Availability, Price, GW, Season, Pts, PPG, xP, Form, Mins, xGI, DefCon. The bar columns are grouped at the end so the only wide columns sit together rather than being interleaved with tight ones. xP sits with the returns it summarises, before the bars.
 
-**Availability is a column, in the same place as the Fixtures view's Fixture Score**: second, frozen, and the same width, so the two tables line up column for column and switching between them moves nothing. It was a dot beside the name, which made the two tables disagree about what their second column is and left the flag too small to catch.
+**Availability sits inside the player cell, after the club: name, club, dot.** It had a column of its own for a while, which reads well on a laptop and badly on a phone: a column costs a fixed slice of width in the frozen cell that is already the widest thing on screen, and in a normal week all fifteen are green — a column's worth of space to say nothing is wrong.
 
-It is drawn as a short centred pill: green available, amber doubtful with the percentage on it, red out. **Short and centred rather than filling the cell** — at full width fifteen of them read as one solid block of colour, and the point of the column is to pick out the one or two that are not green.
+A dot is small enough to sit beside the name and still be the only coloured thing in the cell, which is what makes an exception findable. Green available, amber doubtful, red out. **Nothing is lost by shrinking the marker**: the reason and the chance of playing are on the news line below the name, and the title and screen-reader text always carry the state in words, so colour never carries it alone.
 
 **Mins is minutes per match, not the season total.** A total becomes abstract the moment clubs have played different numbers of matches, which blanks and doubles guarantee. The denominator is that club's **started** fixtures counted from `fixtures/`, which is right through blanks and doubles; the `teams` array's own `played` is never populated. The bar runs against the 90 available rather than against the squad, so a full bar means every minute played.
 
@@ -477,7 +481,7 @@ In a normal week no player has news, so that second line does not exist and the 
 
 Sorting happens **within each group**, so the starting XI and the bench stay separated whatever the order. That split is structural (7.1), not merely the default ordering. Ties fall back to squad order so equal values keep a stable, meaningful sequence.
 
-The sort lives in the `sort` URL parameter, shared with Club Blocks (8.2). The two vocabularies do not overlap and each view falls back to its own default on a value it does not recognise, so the parameter can ride through a view switch and be restored on return.
+The sort lives in the `sort` URL parameter, shared with Teams (8.2). The two vocabularies do not overlap and each view falls back to its own default on a value it does not recognise, so the parameter can ride through a view switch and be restored on return.
 
 **"Visually obvious" means visible without scrolling.** This is why availability lives in the frozen player column rather than in Status and News columns of its own. Those columns are off screen at exactly the width where the flag matters most, and they were removed for it: the dot, the tinted row and the news line all travel with the frozen column.
 
@@ -487,7 +491,7 @@ The sort lives in the `sort` URL parameter, shared with Club Blocks (8.2). The t
 
 **Price movements are signed and coloured by direction,** green for a rise and red for a fall, consistent with 6.4's rule that green means good: a rise lifts the owner's team value. No change renders as an empty cell, not a dash or a zero (see 7.3.1), so the eye goes only to what moved. Both movement fields are in tenths like the price itself (constraint 4).
 
-This view has no horizon and no Fixture Score, so the horizon control (7.6) and the fixture colour legend are not shown on it. The `horizon` parameter is still carried through the view switcher, so returning to Fixtures or Club Blocks restores the horizon the user left.
+This view has no horizon and no Fixture Score, so the horizon control (7.6) and the fixture colour legend are not shown on it. The `horizon` parameter is still carried through the view switcher, so returning to Fixtures or Teams restores the horizon the user left.
 
 #### 7.3.3 xP (FPL)
 
@@ -533,7 +537,7 @@ An earlier version kept all six always and dashed the unused ones, to stop the t
 
 **Rival ownership is a property of the whole row, so the row carries it.** Players the rival does not own are greyed back and the ones they do own stay crisp with a filled "Owns" chip. The question in rival mode is "which of mine do they also have", and that is answered by scanning names, not by reading across to a column of yes and no.
 
-**The population picker floats** behind a "Compare against …" button that names the current selection (7.8). It was a permanent card of links and ID forms above the table, which was the untidiest thing on the page and pushed the table down on the one view where the table *is* the comparison.
+**The population picker floats** behind a "Compare against …" button that names the current selection (7.8). The button gets **its own row, under the view's question and above the guidance**, and runs full width on a phone. Floated to the right of the guidance it and a paragraph of prose fought for one line and neither survived a narrow screen. It was a permanent card of links and ID forms above the table, which was the untidiest thing on the page and pushed the table down on the one view where the table *is* the comparison.
 
 **Rival dropdown.** When a mini league is selected, offer that league's managers as a dropdown: team name with manager name, ordered by league rank, excluding the user themselves. **Selecting one runs the comparison immediately; there is no Compare button** (7.4.2). **This costs no extra API call** — the standings response the league comparison already fetches carries `entry`, `player_name` and `entry_name` for every row. Hide the dropdown entirely in global mode, where there is no league to populate it from. Keep the manual rival manager ID field for rivals outside the user's leagues.
 
@@ -600,7 +604,9 @@ All three populations are built. `compareOwnership` is the one function section 
 
 This view has no horizon, so like the Form view it does not show the horizon control, but it carries the parameter through.
 
-### 7.5 View 4 — Club Blocks
+### 7.5 View 4 — Teams
+
+**Labelled "Teams"; the URL parameter stays `view=clubs`.** Renaming a value that is in every shared link, to match a label, would break them for nothing.
 
 **Question answered:** who should I buy?
 
@@ -622,9 +628,9 @@ Column widths scale to the number on show, and a trailing spacer absorbs any wid
 
 ### 7.6 Horizon control
 
-Shared by the Fixtures and Club Blocks views. Both must read from the same `horizon` URL parameter, so switching between the views preserves it.
+Shared by the Fixtures and Teams views. Both must read from the same `horizon` URL parameter, so switching between the views preserves it.
 
-- **Preset buttons** for 1, 3, 5, 7, 9 and **All**, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline. **All** is not a fixed number: it resolves to the gameweeks remaining, so it moves as the season does and is highlighted whenever the applied horizon happens to be the whole remainder
+- **Preset buttons** for 1, 3, 5, 7 and **All**, for one-click switching. A horizon of 1 shows the next gameweek only, which is the most common question at a deadline. **All** is not a fixed number: it resolves to the gameweeks remaining, so it moves as the season does and is highlighted whenever the applied horizon happens to be the whole remainder
 - **Numeric input** accepting any integer from 1 to the number of gameweeks remaining in the season
 - Clicking a preset sets the numeric input
 - Typing a custom value clears the preset highlight; typing a value that matches a preset highlights it
@@ -689,7 +695,7 @@ The app is four views over one squad. Everything else is chrome, and chrome had 
 
 #### The menu
 
-**Loading a squad and viewing as another manager live in a drawer** behind a button in the header. Both are done once and then forgotten, so they cost one click on the rare occasion they are wanted and give the views the top of the page back. A drawer rather than a dropdown because it holds two full controls, one a two-step cascade, and both want room at 380px.
+**Loading a squad and viewing as another manager live in a drawer** behind a **Configure** button in the header, shaped like the Ownership view's "Compare against" button. Both open a panel of settings over the page, and two different shapes for one idea made the app look like two apps. Both are done once and then forgotten, so they cost one click on the rare occasion they are wanted and give the views the top of the page back. A drawer rather than a dropdown because it holds two full controls, one a two-step cascade, and both want room at 380px.
 
 Before a squad is loaded there is no header and no menu, so the title and the ID form stay on the page.
 
@@ -753,7 +759,7 @@ This makes every view shareable by construction and removes the need for account
 | `id` | Manager ID | None. Show the ID entry form |
 | `view` | `fixtures`, `form`, `ownership`, `clubs` | `fixtures` |
 | `horizon` | Any integer from 1 to the gameweeks remaining in the season | `5` |
-| `sort` | Club Blocks: `score`/`club`/`owned`, each `-asc` or `-desc`. Form: `squad`, or `price`/`gw`/`season`/`form`/`points`/`ppg`/`mins`/`xgi` with a direction | Club Blocks `score-desc`, Form `squad` |
+| `sort` | Teams: `score`/`club`/`owned`, each `-asc` or `-desc`. Form: `squad`, or `price`/`gw`/`season`/`form`/`points`/`ppg`/`mins`/`xgi` with a direction | Teams `score-desc`, Form `squad` |
 | `league` | League ID | None. Ownership falls back to global mode |
 | `rival` | Manager ID of a single rival | None. Ownership falls back to global mode |
 | `as` | Manager whose squad is shown, when not `id` | None. Shows the user's own squad |
@@ -860,7 +866,7 @@ Route handlers return `{ error: { code, message } }`.
 1. ~~Server-side API routes with caching and correct headers~~ **Done**
 2. ~~Squad loading and row rendering~~ **Done**
 3. ~~Fixtures view (the highest-value view, build it first)~~ **Done**
-4. ~~Club Blocks view (reuses the fixture data already fetched)~~ **Done**
+4. ~~Teams view (reuses the fixture data already fetched)~~ **Done**
 5. ~~Form view (no new data required; `bootstrap-static` is already loaded)~~ **Done**
 6. ~~Ownership view, global mode only~~ **Done**
 7. ~~Ownership view, league and rival modes~~ **Done**

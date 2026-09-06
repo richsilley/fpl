@@ -116,10 +116,12 @@ export function OwnershipTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <DirectionFlag reference={reference} />
-        <PopulationButton href={populationHref} label={reference.label} />
-      </div>
+      {/* Its own row, under the view's question and above the guidance, rather
+          than floated to the right of the guidance: beside it, the button and
+          a paragraph of prose fought for the same line and neither survived a
+          phone. */}
+      <PopulationButton href={populationHref} label={reference.label} />
+      <DirectionFlag reference={reference} />
 
       {reference.notice && (
         <p
@@ -249,7 +251,7 @@ function PopulationButton({ href, label }: { href: string; label: string }) {
     <Link
       href={href}
       scroll={false}
-      className="inline-flex shrink-0 items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+      className="inline-flex w-full items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 transition-colors hover:bg-neutral-100 sm:w-auto dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
     >
       <span className="text-neutral-500 dark:text-neutral-400">
         Compare against
@@ -517,7 +519,7 @@ function DirectionFlag({ reference }: { reference: ReferencePopulation }) {
   const { standing } = reference
 
   return (
-    <div className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="text-sm text-neutral-700 dark:text-neutral-300">
         {standing.guidance}
       </p>

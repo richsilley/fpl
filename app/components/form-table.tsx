@@ -3,7 +3,6 @@ import Link from 'next/link'
 import {
   MATRIX_HEADER_HEIGHT,
   MATRIX_PLAYER_COLUMN,
-  MATRIX_PLAYER_COLUMN_END,
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
 import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
@@ -54,8 +53,6 @@ const SEASON_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
 // Wider than they were: a bar needs room before a high value and a low one
 // look different at a glance, which is the only reason the bars exist.
 const BAR_COLUMN = 'w-28 min-w-28'
-/** Matches the Fixture Score column, and sits in the same place (7.3). */
-const AVAILABILITY_COLUMN = 'w-24 min-w-24'
 /** Sized to its own header, which is wider than the number under it. */
 const XP_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
 
@@ -131,17 +128,6 @@ export function FormTable({
                 </span>
               )}
             </SortableHeader>
-
-            {/* Sits exactly where the Fixtures view puts Fixture Score, at the
-                same width and also frozen, so the two tables line up column
-                for column and switching between them moves nothing. */}
-            <th
-              scope="col"
-              title="Whether the player is expected to be available"
-              className={`sticky z-20 border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-center font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${MATRIX_PLAYER_COLUMN_END} ${AVAILABILITY_COLUMN}`}
-            >
-              Availability
-            </th>
 
             {/* Price block */}
             <SortableHeader
@@ -270,7 +256,7 @@ export function FormTable({
           <tr>
             <th
               scope="colgroup"
-              colSpan={13}
+              colSpan={12}
               className="sticky left-0 border-y border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/70 dark:text-neutral-400"
             >
               Bench
@@ -415,6 +401,7 @@ function PlayerRow({
           <span className="shrink-0 text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
             {player.club}
           </span>
+          <AvailabilityDot availability={availability} />
         </span>
         {/* Only rendered when there is news, so in a normal week this line does
             not exist and the rows stay compact. */}
@@ -425,15 +412,6 @@ function PlayerRow({
           </span>
         )}
       </th>
-
-      {/* A bar, not a dot. At the width of the Fixture Score column it can be
-          read as a length rather than squinted at, and it lines up with the
-          Fixtures view so the eye lands in the same place. */}
-      <td
-        className={`sticky z-10 border-b border-r border-neutral-200 px-2 py-1.5 dark:border-neutral-800 ${rowBackground} ${MATRIX_PLAYER_COLUMN_END} ${AVAILABILITY_COLUMN}`}
-      >
-        <AvailabilityBar availability={availability} />
-      </td>
 
       <NumericCell background={rowBackground} width={PRICE_COLUMN}>
         {formatPrice(player.price)}
@@ -656,49 +634,32 @@ function PriceChangeCell({
 }
 
 /**
- * Availability as a bar in its own column, where the Fixtures view puts
- * Fixture Score (section 7.3).
+ * Availability, immediately after the club, as a dot (section 7.3).
  *
- * It used to be a dot beside the name, which made the two tables disagree
- * about what their second column is, and left the flag too small to catch. At
- * column width it is read at a glance and the header names it.
+ * It had a column of its own for a while. A column is more legible on a laptop
+ * but costs a fixed slice of the width on a phone, where the frozen name cell
+ * is already the widest thing on screen, and in a normal week every one of the
+ * fifteen is green — a column's worth of space to say "nothing is wrong".
  *
- * Colour alone would fail anyone who cannot separate these, so anything other
- * than available carries its own label on the bar — the chance of playing when
- * the API gives one — and the title and screen-reader text always spell it out.
+ * A dot is small enough to sit inside the name cell and still be the only
+ * coloured thing in it, which is what makes an exception findable. The reason
+ * and the chance of playing are on the news line below the name, so nothing is
+ * lost by shrinking the marker; colour alone never carries the meaning.
  */
-function AvailabilityBar({ availability }: { availability: Availability }) {
-  // Green for available, amber for doubtful, red for out. The dash is short
-  // and centred rather than filling the cell: at full width fifteen of them
-  // read as a solid block of colour, and the point is to pick out the one or
-  // two that are not green.
+function AvailabilityDot({ availability }: { availability: Availability }) {
   const tone =
     availability.level === 'available'
-      ? 'bg-emerald-400/80 dark:bg-emerald-500/60'
+      ? 'bg-emerald-500'
       : availability.level === 'doubtful'
-        ? 'bg-amber-400/90 dark:bg-amber-500/70'
-        : 'bg-rose-500/80 dark:bg-rose-600/70'
-
-  const caption: string =
-    availability.level === 'available'
-      ? ''
-      : availability.chance !== null
-        ? `${availability.chance}%`
-        : availability.label
+        ? 'bg-amber-500'
+        : 'bg-rose-600'
 
   return (
-    <span className="flex w-full justify-center">
-      <span
-        title={availability.label}
-        className={`flex items-center justify-center rounded-full ${
-          caption === '' ? 'h-2 w-10' : 'h-4 w-14 px-1'
-        } ${tone}`}
-      >
-        <span className="text-[10px] font-semibold leading-none text-neutral-900 dark:text-neutral-50">
-          {caption}
-        </span>
-        <span className="sr-only">{availability.label}</span>
-      </span>
+    <span
+      title={availability.label}
+      className={`inline-block h-2 w-2 shrink-0 rounded-full ${tone}`}
+    >
+      <span className="sr-only">{availability.label}. </span>
     </span>
   )
 }
