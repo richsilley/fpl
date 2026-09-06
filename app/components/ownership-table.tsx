@@ -7,7 +7,6 @@ import {
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
 import {
-  bandStrategyOrder,
   bandStrategyStep,
   ownershipBandOf,
   OWNERSHIP_BANDS,
@@ -21,7 +20,7 @@ import type { SquadPlayer } from '@/lib/fpl/squad'
 /**
  * View 3, Ownership (section 7.4).
  *
- * "Is this player worth owning, given who else owns them and where I sit?"
+ * See what your rivals own, and build a strategy that fits your objective.
  *
  * ## Columns follow the comparison, and the first column never moves
  *
@@ -149,10 +148,13 @@ export function OwnershipTable({
               >
                 Player
               </HeaderCell>
+              {/* Every column carries a tooltip. The two that name a selection
+                  say so, since "the selected league" is answerable from the
+                  header only if you already know which one is selected. */}
               <HeaderCell
                 className={PERCENT_COLUMN}
                 align="left"
-                title="Percentage of all FPL managers who own this player"
+                title="Share of all FPL managers who own this player."
               >
                 Global
               </HeaderCell>
@@ -160,7 +162,7 @@ export function OwnershipTable({
                 <HeaderCell
                   className={PERCENT_COLUMN}
                   align="left"
-                  title={`Ownership within ${leagueLabel}`}
+                  title={`Share of the selected league who own this player. Currently ${leagueLabel}.`}
                 >
                   League
                 </HeaderCell>
@@ -168,7 +170,7 @@ export function OwnershipTable({
               {showRival && (
                 <HeaderCell
                   className={NUMERIC_COLUMN}
-                  title={`Whether ${rivalLabel} owns this player`}
+                  title={`Whether this manager owns the player. Currently ${rivalLabel}.`}
                 >
                   Rival
                 </HeaderCell>
@@ -176,12 +178,16 @@ export function OwnershipTable({
               {showDifference && (
                 <HeaderCell
                   className={NUMERIC_COLUMN}
-                  title="Ownership in the selected population, minus global ownership"
+                  title="The selected population's ownership minus global. Positive means your league backs them more than the wider field does."
                 >
                   Diff
                 </HeaderCell>
               )}
-              <HeaderCell className={BAND_COLUMN} align="left">
+              <HeaderCell
+                className={BAND_COLUMN}
+                align="left"
+                title="Ownership band, coloured by whether it helps or hurts your current position."
+              >
                 Flag
               </HeaderCell>
 
@@ -553,44 +559,59 @@ function describePopulation(reference: ReferencePopulation): string {
 }
 
 /**
- * What the flags mean, once, below the table.
+ * What the columns and the flags mean, once, below the table.
  *
- * Ordered best-first for the current position and coloured to match, so the
- * key is a legend for the table as it stands rather than a fixed glossary. It
- * re-orders when the direction flips, which is the clearest possible statement
- * that the ordering is a consequence of where the manager sits and not a
- * property of the bands.
+ * ## The bands are listed by ownership, not by strategy
+ *
+ * They used to be ordered best-first for the current position, so the list
+ * re-ordered when the direction flipped. Splitting the two ideas reads better:
+ * the list says what a band *is*, which is a fixed property running from most
+ * owned to least, and the paragraph under it says what each is *worth to you*,
+ * which is the part that moves. The chips are still coloured by position, so
+ * the reversal is still visible — it is carried by colour rather than by
+ * shuffling four rows the reader has just learned the order of.
  */
 function BandKey({ position }: { position: FieldPosition }) {
-  const ordered = bandStrategyOrder(position)
-    .map((id) => OWNERSHIP_BANDS.find((band) => band.id === id))
-    .filter((band) => band !== undefined)
-
   return (
-    <div className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
-      <dl className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6">
-        {ordered.map((band) => {
-          const index = OWNERSHIP_BANDS.indexOf(band)
-          const upper = index === 0 ? null : OWNERSHIP_BANDS[index - 1].min
-          return (
-            <div key={band.id} className="flex items-baseline gap-2">
-              <dt className="shrink-0">
-                <BandChip id={band.id} label={band.label} position={position} />
-              </dt>
-              <dd className="text-xs text-neutral-500 dark:text-neutral-400">
-                <span className="tabular-nums">
-                  {upper === null ? `${band.min}%+` : `${band.min}–${upper}%`}
-                </span>
-                <span className="hidden lg:inline">
-                  {' '}
-                  &middot; {band.description}
-                </span>
-              </dd>
-            </div>
-          )
-        })}
-      </dl>
-      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+    <div className="space-y-2 rounded-lg border border-neutral-200 px-4 py-3 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
+      <p>
+        <Term>Global</Term> the share of all FPL managers who own each player.
+      </p>
+
+      <div>
+        <p>
+          <Term>Flag</Term> how widely owned a player is.
+        </p>
+        {/* Most owned to least, which is the order the thresholds run in and
+            the order the labels are learned in. */}
+        <dl className="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-x-6">
+          {OWNERSHIP_BANDS.map((band, index) => {
+            const upper = index === 0 ? null : OWNERSHIP_BANDS[index - 1].min
+            return (
+              <div key={band.id} className="flex items-baseline gap-2">
+                <dt className="shrink-0">
+                  <BandChip
+                    id={band.id}
+                    label={band.label}
+                    position={position}
+                  />
+                </dt>
+                <dd>
+                  <span className="tabular-nums">
+                    {upper === null ? `${band.min}%+` : `${band.min}–${upper}%`}
+                  </span>
+                  <span className="hidden lg:inline">
+                    {' '}
+                    &middot; {band.description}
+                  </span>
+                </dd>
+              </div>
+            )
+          })}
+        </dl>
+      </div>
+
+      <p className="max-w-prose">
         {position === 'unknown' ? (
           <>
             Bands read global ownership and mean the same thing whichever
@@ -600,18 +621,38 @@ function BandKey({ position }: { position: FieldPosition }) {
         ) : (
           <>
             <span className="font-medium text-neutral-700 dark:text-neutral-200">
-              Green marks the bands that help your current position
-            </span>{' '}
-            and red the ones that work against it, best first. Because you are{' '}
-            {position === 'ahead' ? 'ahead of' : 'behind'} this population,{' '}
-            {position === 'ahead'
-              ? 'owning what the crowd owns protects your lead and differentials risk it'
-              : 'differentials are how you close the gap and matching the crowd preserves it'}
-            . The bands themselves read global ownership, so they mean the same
-            thing whichever population is selected.
+              Green marks the bands helping your current position
+            </span>
+            , red the ones working against it.{' '}
+            {position === 'ahead' ? (
+              <>
+                You&rsquo;re ahead of this population, so owning what the crowd
+                owns protects your lead and differentials risk it. Fall behind
+                and the colours reverse, because matching the field can&rsquo;t
+                close a gap.
+              </>
+            ) : (
+              // The mirror image, because the sentence above is a claim about
+              // where the reader actually sits and would be false here.
+              <>
+                You&rsquo;re behind this population, so differentials are how
+                you close the gap and matching the crowd preserves it. Move
+                ahead and the colours reverse, because a lead is protected by
+                owning what the crowd owns.
+              </>
+            )}
           </>
         )}
       </p>
     </div>
+  )
+}
+
+/** The thing being defined, picked out so the definitions scan as a list. */
+function Term({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="font-medium text-neutral-700 dark:text-neutral-300">
+      {children} &mdash;
+    </span>
   )
 }

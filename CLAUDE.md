@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.23; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.24; v1 feature complete).
 
 ## What this is
 
@@ -429,12 +429,17 @@ Rows are the 15 players except where noted.
    never asks which mode it's in. Only `ownershipOf` differs. **Add a fourth
    population by writing a loader, not by branching the function.**
 
-   **Six fixed columns in every mode**: Player, Global, League, Rival, Diff,
-   Flag. Modes fill only what they measure and **dash the rest** (global dashes
-   League/Rival/Diff; league dashes Rival; rival dashes League). Don't go back
-   to hiding columns per mode — the table then reflowed on every switch. A dash
-   means "not measured here", which is not the same as zero.
+   **Columns appear per mode; they are not dashed.** global → Global, Flag.
+   league → Global, League, Diff, Flag. rival → Global, League, Rival, Diff,
+   Flag. An earlier version kept all six always and dashed the unused ones to
+   stop the table reflowing; that traded a reflow for four dead columns on the
+   view most people open first. The frozen player column is pinned by the
+   shared `table-metrics` width, so the part that must not move does not.
    Bands: Template ≥40, Popular 15–40, Low 5–15, Differential <5.
+
+   **Every header carries a tooltip**, including Flag. The two that name a
+   selection append which one is live, since "the selected league" is only
+   answerable from the header if you already know what is selected.
 
    **Rival dropdown** lists the selected league's managers (team — manager, by
    league rank, you excluded). `leagueMembers()` reads the *same cached*
@@ -460,8 +465,17 @@ Rows are the 15 players except where noted.
    exact reverse. Four steps, **two greens and two reds, no amber** — amber
    would read as neutral and there is no neutral. `bandStrategyOrder()` /
    `bandStrategyStep()` in `lib/fpl/ownership.ts`; `unknown` position → grey,
-   never a guess. The legend re-orders and re-colours to match. §6.4's
-   green-means-good rule holds, because green always means "helps you".
+   never a guess. §6.4's green-means-good rule holds, because green always
+   means "helps you".
+
+   **The legend lists the bands by ownership, not by strategy**, most owned to
+   least, and that order is fixed. It used to re-order with the direction; the
+   two ideas read better split — the list says what a band *is*, the paragraph
+   under it says what it is *worth to you*. The chips are still coloured by
+   position, so the reversal is still visible, carried by colour rather than by
+   shuffling four rows the reader has just learned. **That closing paragraph is
+   a claim about where the reader actually sits, so it has an `ahead` and a
+   `behind` wording** — keep both true if either is edited.
 
    Direction still lives in one guidance line above the table, never per player
    (§7.4). Denominator is `total_players`; median split; null rank → unknown.

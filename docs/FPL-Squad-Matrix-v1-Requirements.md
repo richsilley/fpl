@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.23
+**Version:** 1.24
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -554,6 +554,8 @@ Three columns on a wide screen, one on a phone. Eleven short definitions in a si
 
 **Question answered:** is this player worth owning, given who else owns them and where I sit?
 
+**On screen the view is titled "Ownership", with the subtitle "See what your rivals own and build a strategy that fits your objective, whether that's chasing rank or defending a lead."** As on Fixtures (7.2) and Form (7.3), the question above is what the view is for, not what it says to the reader. The subtitle names both objectives on purpose: this is the one view whose advice inverts depending on which the reader has.
+
 The comparison population is selectable:
 
 | Mode | Reference population | Source |
@@ -601,9 +603,30 @@ Four steps applied to that ordering: green tint with dark green text, pale green
 
 The colour uses the same ahead-or-behind value as the guidance line, so the two can never disagree.
 
-The legend re-orders and re-colours with the table, and states plainly that green marks the bands helping the current position. Re-ordering is deliberate: it is the clearest possible statement that the ranking is a consequence of where the user sits, not a property of the bands.
-
 Where there is no rank to read the user against, there is no direction, and the chips stay grey. Colouring them anyway would be inventing advice.
+
+#### 7.4.1.1 The legend
+
+It defines the two columns that need defining and then the four bands:
+
+- **Global** — the share of all FPL managers who own each player
+- **Flag** — how widely owned a player is, then the four bands with their thresholds and one line each
+
+**The bands are listed by ownership, most owned to least, and that order is fixed.** It used to re-order with the direction flag, on the reasoning that the ranking is a consequence of where the reader sits. Splitting the two ideas reads better: the list says what a band *is*, which is a fixed property running Template → Popular → Low → Differential, and the paragraph under it says what each is *worth to you*, which is the part that moves. The chips are still coloured by position, so the reversal is still plainly visible — it is carried by colour rather than by shuffling four rows the reader has only just learned the order of.
+
+**The closing paragraph is a claim about where the reader actually sits, so it has two wordings and both must stay true.** Ahead: owning what the crowd owns protects the lead and differentials risk it; fall behind and the colours reverse, because matching the field cannot close a gap. Behind: the exact mirror. Editing one without the other leaves half the readership being told the opposite of the colours in front of them.
+
+#### 7.4.1.2 Column header tooltips
+
+Every column header carries one, Flag included. The two that name a selection also say which one is currently live, because "the selected league" is only answerable from the header if the reader already knows what is selected.
+
+| Header | Tooltip |
+|---|---|
+| Global | Share of all FPL managers who own this player. |
+| League | Share of the selected league who own this player. |
+| Rival | Whether this manager owns the player. |
+| Diff | The selected population's ownership minus global. Positive means your league backs them more than the wider field does. |
+| Flag | Ownership band, coloured by whether it helps or hurts your current position. |
 
 **League size cap: 50 managers.** A mini league requires one API call per manager. Fetch the top 50 by current league rank and no more. If the league is larger, show a notice stating that the comparison covers the top 50 only. Cache all fetched squads for the remainder of the gameweek.
 
@@ -619,7 +642,7 @@ Where there is no rank to read the user against, there is no direction, and the 
 
 All three populations are built. `compareOwnership` is the one function section 7.4 asks for: it takes a population and returns a row per player, and never asks which mode it is in. The three loaders differ only in how they arrive at an ownership lookup and a rank, which is the "only the denominator changes" the section describes.
 
-**Global mode dashes three of its six columns rather than hiding them.** The reference population *is* the global one, so a reference figure would repeat the global one and the difference would always be zero. An earlier build dropped those columns entirely; the table then changed shape on every mode switch, which cost more than the empty cells saved. Dashes say the same thing without moving anything.
+**Global mode shows two columns, Global and Flag.** The reference population *is* the global one, so a reference figure would repeat the global one and the difference would always be zero. For a while those columns stayed and were dashed, to stop the table changing shape on a mode switch; that is superseded by the rule in 7.4 above — the frozen player column is pinned to the shared width, so the part that must not move does not, and four dead columns on the view most people open first cost more than the reflow did.
 
 **Fetching cost and why the cap exists.** A single `picks/` call takes well over a second, so fifty in series would be well over a minute. They run eight at a time: fifty squads land in about six seconds cold, and under a second and a half once cached. Each manager's picks are cached for the rest of the gameweek by the same rule as the user's own (8.3), so that cost falls once per league per gameweek, not once per page view.
 

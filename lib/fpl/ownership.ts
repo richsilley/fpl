@@ -32,26 +32,26 @@ export const OWNERSHIP_BANDS: OwnershipBand[] = [
     id: 'template',
     label: 'Template',
     min: 40,
-    description: 'Owned by most managers. Not owning them is the bigger move',
+    description:
+      'owned by most managers, so not owning them is the bigger move',
   },
   {
     id: 'popular',
     label: 'Popular',
     min: 15,
-    description: 'Widely owned, but far from universal',
+    description: 'widely owned, but far from universal',
   },
   {
     id: 'low',
     label: 'Low',
     min: 5,
-    description: 'Owned by a minority',
+    description: 'owned by a minority',
   },
   {
     id: 'differential',
     label: 'Differential',
     min: 0,
-    description:
-      'Rarely owned. Moves you away from the field, in either direction',
+    description: 'rarely owned, and moves you away from the field',
   },
 ]
 
@@ -179,8 +179,10 @@ export function fieldStanding(
     betterThanPercent,
     // Section 7.4: "Ahead means differentials are a risk and convergence
     // protects the lead. Behind means the opposite."
+    // The risk and its two consequences read better as claim then explanation
+    // than as one sentence carrying a colon and a second clause after it.
     guidance: ahead
-      ? `You are ahead of ${wording.subject}, so differentials are a risk: every one is a way to lose ground you already hold. Owning what ${wording.crowd} own protects the lead.`
+      ? `You are ahead of ${wording.subject}, so differentials are a risk. Every one is a way to lose ground you already hold, while owning what ${wording.crowd} own protects your lead.`
       : `You are behind ${wording.subject}, so owning what ${wording.crowd} own preserves the gap. Differentials are how you close it, which is why they are worth the risk here.`,
   }
 }
