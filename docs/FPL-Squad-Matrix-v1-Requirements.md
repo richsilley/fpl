@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.24
+**Version:** 1.25
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -678,6 +678,10 @@ This view has no horizon, so like the Form view it does not show the horizon con
 
 **Question answered:** who should I buy?
 
+**On screen the view is titled "Teams", with the subtitle "Find your next target. Every club ranked by the fixtures ahead and how they're playing."** As on the other three views, the question above is what the view is for, not what it says to the reader. The subtitle names both scored columns, so it also states the range the "Gameweek N onwards" suffix used to carry, and that suffix is dropped here as it is on Fixtures.
+
+**Its legend is the Fixtures legend plus one entry**, *Owned*, after Team Strength: *which of your players come from each club. FPL allows three per club, so a club showing three is closed to you until you sell one.* The two views share one component so their definitions cannot drift; the extra entry is the one column Fixtures does not have.
+
 - Rows are the twenty Premier League clubs
 - **Fixture Score** (section 6) over a selectable horizon, displayed as score with fixture count in brackets
 - Horizon control per section 7.6
@@ -735,6 +739,22 @@ Clicking a player's name opens it. The name is the target because it already ide
 - **A search box filters by player or club in one field.** "bruno" finds every Bruno, "haaland" finds Haaland, "arsenal" finds every Arsenal player. One box, not a field selector
 - Selecting performs the swap and closes the panel
 
+**The header is three lines, not one.** Title *Replace Gillespie*; under it the player's details, *Newcastle · Goalkeeper · £4.5m*; under that what the list is, *Every goalkeeper in the game, ranked by fixture score over the next 7 gameweeks. £0.0m available.* Run together they put the name in competition with three attributes of the player being replaced, which is the least important part of the dialog. **Positions are spelled out** — "Goalkeeper", not "GKP". The code is a column heading; this is prose.
+
+**The ranking column is headed by the metric itself** — "Fixture Score", "Form", "Ownership" — not "Ranked by". A generic heading over a column of values that already name their own metric says nothing the column does not.
+
+#### The badge legend
+
+The `in squad`, `over budget` and `4th <club>` badges appeared on rows with nothing anywhere explaining them. A footer under the list defines all three and then states the rule below in one line:
+
+| Badge | Meaning |
+|---|---|
+| in squad | already one of your fifteen |
+| over budget | costs more than you have |
+| 4th COV | you already own three from that club |
+
+*These players are still listed rather than hidden, because you may be planning to fund the move by selling elsewhere.* That reason was written down only here, in the requirements, where no reader of the app would ever find it.
+
 #### Do not filter or hide
 
 **Unaffordable players and players who would breach the three-per-club limit must still appear**, with the cost difference shown and a flag.
@@ -753,6 +773,13 @@ This is a planning surface, not a validator. Invalid intermediate states are leg
 
 A persistent summary strip, always visible, not scrolled away — so it is sticky rather than merely placed at the top. Over budget and a fourth player from one club are both conditions that can be created three swaps earlier and only discovered when the transfers are made for real.
 
+Two lines:
+
+1. `Scratch squad · {n} change{s} · £{x}m available`
+2. **Nothing here changes your real FPL team.** Bank and squad value are from the last deadline and don't move with prices, so available funds are an estimate.
+
+**The first sentence of line 2 must never be truncated at any width.** It is the only thing on screen telling the reader their actual team is untouched, and a tool that silently edits a real FPL squad is exactly what a first-time user fears it might be. It is therefore emphasised, placed ahead of the caveat about the figures, and given its own element that wraps rather than sharing a line that could clip.
+
 - **"Over budget by £0.8m"** when available funds go negative
 - **"4 Sunderland players"** when any club exceeds three
 - When a club is over the limit, **highlight every row for that club**, not just the newest, since any of them could be the one dropped. The mark is an accent down the frozen player column, so it survives horizontal scrolling on a phone and does not collide with the availability tints in 7.3
@@ -763,11 +790,20 @@ A persistent summary strip, always visible, not scrolled away — so it is stick
 
 The app is four views over one squad. Everything else is chrome, and chrome had taken the top third of every page: a title, a manager ID form, a view-as card, and only then the tabs. The eye landed on the least important thing first.
 
-#### The menu
+#### The Options dialog
 
-**Loading a squad and viewing as another manager live in a drawer** behind an **Options** button at the right-hand end of the header, shaped like the Ownership view's "Compare against" button. It sits after the figures rather than before the team name: the identity is what the bar is for and should be read first, and a control ahead of it took the position of most importance to say the least. Both open a panel of settings over the page, and two different shapes for one idea made the app look like two apps. Both are done once and then forgotten, so they cost one click on the rare occasion they are wanted and give the views the top of the page back. A drawer rather than a dropdown because it holds two full controls, one a two-step cascade, and both want room at 380px.
+**Loading a squad and loading someone else's live behind an Options button** at the right-hand end of the header, shaped like the Ownership view's "Compare against" button. It sits after the figures rather than before the team name: the identity is what the bar is for and should be read first, and a control ahead of it took the position of most importance to say the least. Both are done once and then forgotten, so they cost one click on the rare occasion they are wanted and give the views the top of the page back.
 
-Before a squad is loaded there is no header and no menu, so the title and the ID form stay on the page.
+**It is a centred dialog, identical to "Compare against".** It was a drawer pinned to the left edge, which made the app's one settings panel look like a different kind of object from the population picker and the replacement panel. Three panels doing the same job now open, sit and dismiss the same way, from the same component. Width is the only axis they differ on, because Options holds a short stack of controls rather than a table.
+
+Contents, headings in sentence case:
+
+- **Load a squad** — the Manager ID field and the **Load squad** button, then: *Your ID is the number after `/entry/` in the address bar on the FPL website. It doesn't appear in the mobile app.* The same instruction as the empty state (7.1), because by the time a squad is loaded the empty state is gone and this is the only place left to ask
+- **Or load from a league** — the two dropdowns, then: *Loads that manager's squad in place of your own. Your scratch changes are kept and can be reset at any time.* Not "View as another manager", which implies a mode to enter and leave rather than what actually happens, which is the same squad swap as the section above by a different route
+
+**The manager dropdown is always visible, disabled until a league is chosen.** It used to be absent entirely, on the reasoning that a control which does nothing is worse than one that is not there. That left the first dropdown looking like the whole feature, with no sign that a second step followed, so choosing a league appeared to do nothing at all. A greyed control announces the step and says it is not your turn yet; a missing one announces nothing.
+
+Before a squad is loaded there is no header and no Options button, so the title and the ID form stay on the page.
 
 #### The header is the one permanent bar
 
@@ -787,13 +823,31 @@ The menu, the Ownership population picker (7.4) and the replacement panel (7.7) 
 
 **They are URL state, not component state.** `?panel=menu`, `?panel=population` and `?swap=<id>`. Opening is a link and the backdrop is a link, so an overlay needs no client JavaScript, survives the back button, and cannot get stuck open. Clicking anywhere outside the panel lands on the backdrop and navigates to the closed URL, which is dismiss-on-click-away for free.
 
+**All three are the same centred dialog**, from one component, differing only in width. They must dismiss identically: backdrop click, Close button, and **Escape**.
+
+**Escape and focus return are the two things a link cannot express**, so they are the one piece of client JavaScript in the overlay (`OverlayKeys`, which renders nothing). Escape is a key press, not a navigation; returning focus to whatever opened the dialog is something only the browser can be told to do. Both are enhancements — with JavaScript off the backdrop and the Close button still dismiss, which is the behaviour this section actually requires. The trigger is captured when the dialog mounts rather than looked up on close, because by then the URL has changed; dismissal is a navigation within the same route, so React keeps the header's nodes and the captured button is still live.
+
 Unlike the scratch squad, these are **not** carried between views: an overlay is a momentary act, and arriving on a new view with a dialogue already open over it would be surprising.
 
-**A step that narrows a choice keeps the overlay open; a step that answers it closes.** Picking a league in the view-as cascade produces the list of teams to read next, so the drawer stays; picking a team is the act the drawer exists for, so it closes. The same rule governs the Ownership population picker: league keeps it open, rival closes it. Loading a squad closes the drawer for the same reason.
+**A step that narrows a choice keeps the overlay open; a step that answers it closes.** Picking a league in the view-as cascade produces the list of managers to read next, so Options stays open; picking a manager is the act it exists for, so it closes. The same rule governs the Ownership population picker: league keeps it open, rival closes it. Loading a squad closes Options for the same reason.
 
 #### One gutter for the whole page
 
 The sticky bars bleed to the window edge but pad themselves back to the same gutter as the content below, and both are capped at the same width and centred. The menu button, the view tabs and every table therefore start on exactly the same vertical line, and the margins are equal on both sides. Before this the bars were centred within a maximum width while the page content ran the full window, so the two disagreed by however wide the window was.
+
+#### 7.8.1 Legends
+
+**Every legend is a single column.** One entry per row, each free to run the full width of the table it sits under. They were laid out in two or three columns, which under a full-width table broke each definition into fragments a third of the page wide while the rest of the line sat empty; the Ownership legend had to hide its band descriptions below the `lg` breakpoint to fit at all. A definition list is read down, one entry at a time, so the column it occupies should be as wide as the thing it explains.
+
+#### 7.8.2 The rows are clickable, and the page says so
+
+A line under the subtitle on Fixtures, Form and Ownership: *Click any player to try a replacement. Candidates are ranked by the view you're in, so here you'll see …, while the … tab ranks the same players by … instead.*
+
+Scratch squad editing (7.7) is the largest feature in the app and its entry point is an underline on a player name. Nothing said it was there.
+
+**The example names a different view on purpose.** "Ranked by the view you're in" is abstract until it is contrasted with what the same list would look like somewhere else, and that contrast is also the argument for opening the panel from the view you are already reading rather than from a menu. Each view names one of the others: Fixtures points at Form, Form and Ownership both point at Fixtures.
+
+**Not on Teams.** Its rows are clubs, so there is nothing to replace.
 
 ### 7.9 Writing the copy
 

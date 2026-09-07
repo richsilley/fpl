@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.24; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.25; v1 feature complete).
 
 ## What this is
 
@@ -170,35 +170,50 @@ rendering a scratch squad**.
 - Budget is `bank + sold - bought`. `bank`/`value` are **last-deadline**
   figures that do not move with prices — the strip says so, and must keep
   saying so.
-- `ReplacementPanel` is the **third and last** Client Component (after the
-  horizon control and `AutoSubmitSelect`): search filters as you type. Rows
+- `ReplacementPanel` is a Client Component (with the horizon control,
+  `AutoSubmitSelect` and `OverlayKeys`): search filters as you type. Rows
   are still server-built links, so the swap itself needs no JS.
 - Ranking follows the reader: the active column sort, else the view default
   (`rankingFor`). Ownership needs the ahead/behind direction, which
   `populationDirection` gets from one cached call rather than waiting on the
-  fifty-squad fan-out.
+  fifty-squad fan-out. `rankingFor` returns **two names**: `label` for the
+  description sentence, `column` for the heading over the values.
+- **The panel explains its own badges.** A footer defines `in squad`,
+  `over budget` and `4th <club>`, then says why unusable rows are listed at
+  all. Both were previously written down only in the requirements.
 
 ## App shell (§7.8)
 
 **The app is four views over one squad; everything else is chrome.** Load-squad
-and view-as live in a **menu drawer**, not on the page. The four views are
+and view-as live in the **Options dialog**, not on the page. The four views are
 segmented buttons at full width — the loudest thing below the header.
 
-- **Header is sticky at every width** and carries the menu button. The scratch
-  strip rides in the *same* sticky container (`page.tsx`), so they cannot
-  overlap — neither positions itself.
+- **Header is sticky at every width** and carries the Options button. The
+  scratch strip rides in the *same* sticky container (`page.tsx`), so they
+  cannot overlap — neither positions itself.
 - On a phone the six stat tiles collapse to one line of text; sticky tiles
   would eat a third of the screen.
 - **Viewing as → the whole header turns amber and holds "Back to my team".**
-  The picker in the menu deliberately has no second copy of that button.
-- **Overlays float over a backdrop; they never push the page down.** Menu,
+  The picker in Options deliberately has no second copy of that button.
+- **Overlays float over a backdrop; they never push the page down.** Options,
   Ownership population picker, replacement panel. All three are **URL state**
   (`panel=menu`, `panel=population`, `swap=<id>`) — opening is a link, the
   backdrop is a link, so click-away dismissal is free and needs no JS. Unlike
   `out`/`in`, `panel` and `swap` are **not** carried between views.
+- **All three are the same centred dialog**, differing only in `width`
+  (`narrow` for Options, `wide` for the other two). Options was a left drawer,
+  which made the app's one settings panel look like a different kind of object
+  from the other two. Do not reintroduce a drawer variant.
+- **`OverlayKeys` adds Escape and focus return** to every overlay — the two
+  things a link cannot express. It renders nothing and is an enhancement only:
+  without JS the backdrop and Close still dismiss. Focus is captured on mount
+  and restored on unmount if the node is still connected.
 - **Narrowing a choice keeps an overlay open; answering it closes.** Picking a
   league carries `panel` through (it produces the list to read next); picking a
-  team or a rival does not. Same rule in the drawer and the population picker.
+  team or a rival does not. Same rule in Options and the population picker.
+- **The manager dropdown is present but disabled** until a league is chosen. It
+  used to be absent, which left no sign that a second step followed, so picking
+  a league looked like it did nothing.
 - **One gutter for the whole page.** The sticky bars bleed to the window edge
   but pad back to the same gutter, and bars and content share `max-w-[1600px]`
   centred. Menu button, tabs and every table start on the same line. Change the
@@ -350,6 +365,17 @@ Applies to every string a reader sees — headings, labels, tooltips, legends.
   its last paragraph for the live mode, so the only way to learn what a mode did
   was to switch to it — backwards, since the text exists to help you choose.
   It also keeps the block the same height, so nothing reflows on a switch.
+- **Every legend is a single column**, one entry per row, each free to run the
+  full width of the table above. Laid out in two or three columns under a
+  full-width table, every definition broke into fragments a third of the page
+  wide while the rest of the line sat empty, and the Ownership one had to hide
+  its band descriptions below `lg` to fit. Do not reintroduce `grid-cols-*`
+  here.
+- **The rows are clickable and the page has to say so** (`TRANSFER_HINT` in
+  `page.tsx`). It is the least discoverable thing in the app and it opens the
+  whole scratch squad. The example names a *different* view on purpose:
+  "ranked by the view you're in" is abstract until contrasted with what the
+  same list looks like elsewhere. Teams gets none — its rows are clubs.
 
 ## The four views
 
