@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.28
+**Version:** 1.29
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -899,7 +899,92 @@ Scratch squad editing (7.7) is the largest feature in the app and its entry poin
 
 **Not on Teams.** Its rows are clubs, so there is nothing to replace.
 
-### 7.9 Writing the copy
+### 7.9 View 5 — The Edge
+
+**Title "The Edge", subtitle "Find your best moves. Players to consider buying and selling, ranked for your position and your risk appetite."**
+
+Ranked buy and sell suggestions. No optimiser in this pass.
+
+#### Two separate layers
+
+**This separation is the core design decision. They must not be merged.**
+
+**Layer 1 estimates how many points a player scores.** Identical for every user and every strategy. A single model with a testable output.
+
+**Layer 2 decides how much those points are worth given the user's position.** This is where strategy enters, and it needs exactly one tuning constant.
+
+Merging them would require a weight per combination of scope, objective and risk, none of which could ever be validated, because none names an observable quantity. Keeping them apart means one falsifiable model plus one preference setting.
+
+#### Layer 1: point projection
+
+Per player, per fixture in the horizon:
+
+```
+projected = P(start) x (appearance + attacking + defensive)
+```
+
+- **P(start)** from recent minutes and availability status. A player flagged out scores 0
+- **appearance** 2 if likely to play 60+, else 1
+- **attacking** xGI per 90 x fixtureMultiplier x points per goal involvement for that position
+- **defensive** clean sheet probability x position clean sheet points, plus P(clearing DefCon threshold) x 2
+
+**fixtureMultiplier** scales attacking output by the fixture, derived from the club's Fixture Score for that gameweek under the currently selected difficulty mode (6.7).
+
+Summed across the horizon one fixture at a time, so a double gameweek earns twice and a blank earns nothing — the same shape 6.5 relies on, with no special cases.
+
+**Every constant is named at the top of the file.** They are tunable, and unlike a composite score they are testable against actual points.
+
+#### Layer 2: strategy adjustment
+
+```
+value = projected + RISK x direction x (ownership - populationMean)
+```
+
+Strategy does not change how many points a player scores. It changes how much you care about variance relative to the people you are competing with. Leading, you minimise the chance of losing ground, so you want what your rivals own. Chasing, you need differentials. Same projections, opposite ranking.
+
+**The sign of `direction` is the reverse of the one first specified.** The original said "-1 when ahead of the reference population, +1 when behind" — which, taken literally, does the opposite of the paragraph above it. Built that way it ranked a 30%-owned player below a 0.2%-owned one for a manager in the top 1%, advising someone defending a lead to take on variance against a field they were already beating. **Ahead is +1, behind is -1**, matching both the reasoning and 7.4’s existing rule that ahead makes Template the best band. Two views giving opposite advice from the same standing would be a contradiction the reader can see.
+
+Unknown standing gives 0, dropping the term rather than guessing a direction.
+
+#### Controls
+
+- **Scope** — Overall, a league, or a named rival. Reuses the existing "Compare against" modal
+- **Risk** — Conservative, Balanced, Aggressive
+- **Horizon** — the same control as 7.6
+
+**No separate Objective control.** Direction is derived from whether the user is ahead of or behind the selected scope, which the app already computes for 7.4's direction flag. Aggressive-when-ahead extends a lead; conservative-when-ahead defends it. Risk plus scope covers every case in fewer controls, and a control whose value can be derived is one that can be set to disagree with reality.
+
+The derived direction is stated as a line of text above the lists, in the same style as the Ownership callout.
+
+#### The lists
+
+**BUY**: every player not in the squad, ranked by value, best first. **SELL**: the fifteen, ranked by value, worst first.
+
+No fixed length. Only players clearing a quality threshold appear, so the buy list may be empty in a settled week and long after a fixture swing. **When it is empty it says so**, rather than showing nothing.
+
+**Each row shows the components behind the ranking, not just the rank**: projected points, fixture score, form, ownership, and the strategy adjustment signed and separate from the projection. A player appearing because of fixtures must be visibly different from one appearing because of form. Every other view shows evidence and lets the reader decide; this one gives answers, so it has to show its working or it undermines the views that are right.
+
+Clicking a sell suggestion opens the existing transfer panel (7.7).
+
+#### Rival chips
+
+In rival scope, the chips they have left. `entry/{id}/history/` returns a `chips` array of what has been **played**; remaining is derived from it.
+
+**Never their free transfer count.** It is not exposed, and can only be inferred by tracking transfers accrued against transfers made, which breaks around wildcard and free hit weeks. A number that is wrong exactly when it matters most is worse than no number.
+
+#### Required notice
+
+Persistent, above the lists: *Rival and league squads are from the last deadline. This assumes nobody else makes a transfer before the next one.*
+
+#### Backtest
+
+`scripts/backtest-projection.mjs`. Separate from the app, no storage. Replays the projection as it would have stood at a past gameweek using only `element-summary` history available then, and scores it against actual points. Reports correlation, rank correlation and mean absolute error against a season-points-per-game baseline.
+
+Availability cannot be reconstructed — `status` describes today and is in no history payload — so the replay treats everyone as fit. That biases the error upwards: the live model, which zeroes a flagged player, is better than the numbers say.
+
+Without this the projection is unfalsifiable, which is the entire reason Layer 1 is kept separate.
+
+### 7.10 Writing the copy
 
 Applies to every string a reader sees: headings, labels, buttons, tooltips, legends, empty states.
 

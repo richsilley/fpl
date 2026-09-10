@@ -10,7 +10,7 @@ import {
   type FieldStanding,
 } from './ownership'
 import type { SquadPlayer } from './squad'
-import type { FplEvent } from './types'
+import type { FplBootstrap, FplEvent } from './types'
 
 /**
  * The reference population for the Ownership view (section 7.4).
@@ -93,7 +93,7 @@ export function compareOwnership(
  * difference is always zero and the view collapses those columns (see 7.4.1).
  */
 export function globalPopulation(
-  playersById: Map<number, SquadPlayer>,
+  ownershipByPlayer: Map<number, string>,
   overallRank: number | null,
   totalPlayers: number
 ): ReferencePopulation {
@@ -101,9 +101,14 @@ export function globalPopulation(
     mode: 'global',
     label: 'All FPL managers',
     size: totalPlayers,
+    // Keyed over **every player in the game**, not just the squad's fifteen.
+    // The Ownership view only ever asks about those fifteen, but The Edge
+    // (section 7.9) ranks every candidate, and a lookup that knew only the
+    // squad answered zero for all of them — which read as "nobody owns any of
+    // these" and silently flattened the whole strategy layer to nothing.
     ownershipOf: (playerId) => {
-      const player = playersById.get(playerId)
-      return player ? parseOwnership(player.selectedByPercent) : 0
+      const percent = ownershipByPlayer.get(playerId)
+      return percent === undefined ? 0 : parseOwnership(percent)
     },
     standing: fieldStanding(overallRank, totalPlayers, {
       subject: 'the field',
@@ -343,7 +348,10 @@ export async function leagueMembers(
 }
 
 /** Resolves the gameweek and events the picks fan-out needs. */
-export async function referenceContext(): Promise<{ events: FplEvent[] }> {
+export async function referenceContext(): Promise<{
+  events: FplEvent[]
+  bootstrap: FplBootstrap
+}> {
   const bootstrap = await getBootstrap()
-  return { events: bootstrap.events }
+  return { events: bootstrap.events, bootstrap }
 }

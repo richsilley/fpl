@@ -9,9 +9,10 @@
  */
 
 import { DEFAULT_HORIZON, type Horizon } from './horizon'
+import { DEFAULT_RISK, type RiskLevel } from './edge-strategy'
 
-/** The four views in section 8.2's parameter table. */
-export const VIEWS = ['fixtures', 'form', 'ownership', 'clubs'] as const
+/** The views in section 8.2's parameter table. */
+export const VIEWS = ['fixtures', 'form', 'ownership', 'clubs', 'edge'] as const
 export type ViewId = (typeof VIEWS)[number]
 
 /**
@@ -33,10 +34,15 @@ export const BUILT_VIEWS = [
   'form',
   'ownership',
   'clubs',
+  'edge',
 ] as const satisfies readonly ViewId[]
 
 /** Views whose columns are driven by the horizon (sections 7.2, 7.5 and 7.6). */
-export const HORIZON_VIEWS: readonly ViewId[] = ['fixtures', 'clubs']
+/**
+ * The Edge is here because its projection sums over the horizon, so the
+ * control changes its answer as much as it changes the two table views.
+ */
+export const HORIZON_VIEWS: readonly ViewId[] = ['fixtures', 'clubs', 'edge']
 
 export function usesHorizon(view: ViewId): boolean {
   return HORIZON_VIEWS.includes(view)
@@ -51,6 +57,7 @@ export const VIEW_LABELS: Record<ViewId, string> = {
   form: 'Form',
   ownership: 'Ownership',
   clubs: 'Teams',
+  edge: 'The Edge',
 }
 
 export function parseView(value: string | undefined): ViewId {
@@ -312,6 +319,12 @@ export type AppState = {
    * Not carried between views, like `swap`: an overlay is a momentary act.
    */
   panel?: 'menu' | 'population' | null
+  /**
+   * Risk appetite for The Edge (section 7.9). Carried like the population and
+   * the rating: it is a standing preference, not a per-view setting, so
+   * leaving The Edge and coming back keeps it.
+   */
+  risk?: RiskLevel | null
 }
 
 /**
@@ -329,7 +342,7 @@ export type AppState = {
  */
 export type CarriedState = Pick<
   AppState,
-  'league' | 'rival' | 'as' | 'asLeague' | 'rating' | 'out' | 'in'
+  'league' | 'rival' | 'as' | 'asLeague' | 'rating' | 'out' | 'in' | 'risk'
 >
 
 /** Drops the view-as target, and the league list that fed it. */
@@ -357,6 +370,7 @@ export function buildHref({
   in: incoming,
   swap,
   panel,
+  risk,
 }: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
@@ -399,6 +413,9 @@ export function buildHref({
   }
   if (panel) {
     params.set('panel', panel)
+  }
+  if (risk && risk !== DEFAULT_RISK) {
+    params.set('risk', risk)
   }
   return `/?${params.toString()}`
 }

@@ -283,3 +283,18 @@ export type FplLeagueStandings = {
   }
   last_updated_data: string | null
 }
+
+/**
+ * What `entry/{id}/history/` returns, trimmed to the part The Edge reads.
+ *
+ * Named for the season to keep it apart from `FplEntryHistory` above, which is
+ * the per-gameweek summary carried inside `picks/`. The two are different
+ * payloads from different endpoints and the API calls both of them history.
+ *
+ * `chips` lists chips the manager has **played**, each with the gameweek it
+ * was used in. What is left is derived by subtracting those from the season's
+ * allowance — FPL publishes no "remaining" figure.
+ */
+export type FplEntrySeason = {
+  chips: { name: string; event: number }[]
+}

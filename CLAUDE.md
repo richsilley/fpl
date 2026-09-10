@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.28; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.29; v1 feature complete).
 
 ## What this is
 
@@ -429,6 +429,43 @@ Applies to every string a reader sees — headings, labels, tooltips, legends.
   the subtitle.** It is an aside about how to use the rows, so it belongs next
   to them; under the subtitle and at subtitle size it read as a second subtitle
   and pushed the table down the page.
+
+## The Edge (§7.9) — two layers, and they must stay apart
+
+**Layer 1 (`edge-projection.ts`) says how many points.** Same answer for every
+reader and every strategy. Every constant is named at the top of the file.
+
+**Layer 2 (`edge-strategy.ts`) says what those points are worth here.** One
+tuning constant, `RISK_WEIGHT`, scaled by the risk selector.
+
+**Do not merge them.** Merged, you need a weight per combination of scope,
+objective and risk, and none of those can be validated against anything
+observable. Split, you get one falsifiable model plus one preference. Layer 1
+is checked by `scripts/backtest-projection.mjs`, which replays a past gameweek
+from `element-summary` history alone and scores it against actual points.
+
+**The direction sign is the opposite of the one §7.9 first wrote down**, and
+deliberately. That section said "-1 when ahead", but its own next paragraph
+says leading means you want what your rivals own. Taken literally it ranked a
+30%-owned player *below* a 0.2%-owned one for a manager in the top 1%. The
+prose wins, and it matches §7.4’s existing rule (ahead → Template best).
+Ahead: +1. Behind: -1. Unknown: 0, which drops the term rather than guessing.
+
+**No Objective control.** Direction is derived from the standing the app
+already computes. Risk plus scope covers every case with one fewer control.
+
+**Rows show their working** — projection, fixture score, form, ownership, and
+the strategy adjustment signed and separate. This is the only view that gives
+answers rather than evidence, so a bad suggestion has to be traceable to the
+input the reader disagrees with.
+
+**No free transfer count for a rival, ever.** FPL does not expose one, and the
+only way to infer it breaks around wildcard and free hit weeks. Chips remaining
+are derived from `entry/{id}/history/`, which lists chips *played*.
+
+**Global ownership is keyed over every player, not the squad.**
+`globalPopulation` took a map of the fifteen, which answered 0 for every buy
+candidate and silently flattened Layer 2 to nothing. It reads bootstrap now.
 
 ## The four views
 

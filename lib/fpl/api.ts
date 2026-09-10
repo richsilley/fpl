@@ -21,6 +21,7 @@ import type {
   FplFixture,
   FplLeagueStandings,
   FplPicks,
+  FplEntrySeason,
 } from './types'
 
 /**
@@ -296,4 +297,31 @@ export function secondsUntilNextDeadline(events: FplEvent[]): number {
 
 function nowInSeconds(): number {
   return Math.floor(Date.now() / 1000)
+}
+
+/**
+ * A manager's season history, for the chips they have played (section 7.9).
+ *
+ * Cached with the standings rather than the picks: a chip is played at a
+ * deadline like a squad is, but this is read only to render a rival's
+ * remaining chips, where an hour of staleness costs nothing.
+ */
+export async function getEntryHistory(
+  managerId: number
+): Promise<FplEntrySeason> {
+  try {
+    return await fplFetch<FplEntrySeason>(`/entry/${managerId}/history/`, {
+      revalidate: CACHE_SECONDS.ENTRY,
+      tags: [CACHE_TAGS.ENTRY],
+    })
+  } catch (error) {
+    if (error instanceof FplApiError && error.kind === 'not_found') {
+      throw new FplApiError(
+        'not_found',
+        `No FPL manager found with ID ${managerId}.`,
+        { cause: error, upstreamStatus: error.upstreamStatus }
+      )
+    }
+    throw error
+  }
 }

@@ -252,7 +252,13 @@ export function OwnershipTable({
  * It floats now, and this button names what is currently selected so the state
  * stays legible with the panel shut.
  */
-function PopulationButton({ href, label }: { href: string; label: string }) {
+export function PopulationButton({
+  href,
+  label,
+}: {
+  href: string
+  label: string
+}) {
   return (
     <Link
       href={href}

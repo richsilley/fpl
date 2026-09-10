@@ -11,18 +11,27 @@ import Link from 'next/link'
 
 import { ManagerIdForm } from '@/app/components/manager-id-form'
 import { OwnershipModeSelector } from '@/app/components/ownership-mode-selector'
-import { OwnershipTable } from '@/app/components/ownership-table'
+import {
+  OwnershipTable,
+  PopulationButton,
+} from '@/app/components/ownership-table'
 import { AppMenu, MenuSection } from '@/app/components/app-menu'
 import { Overlay } from '@/app/components/overlay'
 import { RatingToggle } from '@/app/components/rating-toggle'
 import { ReplacementPanel } from '@/app/components/replacement-panel'
+import { EdgeLists } from '@/app/components/edge-lists'
+import { RiskSelector } from '@/app/components/risk-selector'
 import { ScratchStrip } from '@/app/components/scratch-strip'
 import { SquadHeader } from '@/app/components/squad-header'
 import { ViewAsSelector } from '@/app/components/view-as-selector'
 import { ViewTabs } from '@/app/components/view-tabs'
 import { buildClubBlocks } from '@/lib/fpl/clubs'
 import { FplApiError } from '@/lib/fpl/errors'
-import { parseHorizon, type Horizon } from '@/lib/fpl/fixtures'
+import {
+  horizonGameweeks,
+  parseHorizon,
+  type Horizon,
+} from '@/lib/fpl/fixtures'
 import {
   buildHref,
   ownershipModeOf,
@@ -74,6 +83,14 @@ import {
   type Squad,
   type SquadPlayer,
 } from '@/lib/fpl/squad'
+import { remainingChips } from '@/lib/fpl/chips'
+import { buildEdgeLists } from '@/lib/fpl/edge'
+import {
+  describeDirection,
+  parseRisk,
+  type RiskLevel,
+} from '@/lib/fpl/edge-strategy'
+import { getEntryHistory } from '@/lib/fpl/api'
 import { loadMatrixData, type MatrixData } from '@/lib/fpl/views'
 import { getBootstrap } from '@/lib/fpl/api'
 
@@ -99,6 +116,7 @@ const VIEW_QUESTIONS: Record<ViewId, string> = {
     "See what your rivals own and build a strategy that fits your objective, whether that's chasing rank or defending a lead.",
   clubs:
     "Find your next target. Every club ranked by the fixtures ahead and how they're playing.",
+  edge: 'Find your best moves. Players to consider buying and selling, ranked for your position and your risk appetite.',
 }
 
 /**
@@ -128,6 +146,10 @@ const TRANSFER_HINT: Record<ViewId, string | null> = {
   ownership:
     "Click any player to try a replacement. Candidates are ranked by the view you're in, so here you'll see them by ownership, while the Fixtures tab ranks the same players by the fixtures ahead instead.",
   clubs: null,
+  // The Edge names its own action in the lists themselves, and a line telling
+  // the reader that candidates are ranked by the view they are in would be
+  // saying the obvious on the one view whose entire subject is the ranking.
+  edge: null,
 }
 
 /**
@@ -173,6 +195,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const swapFor = parseEntityId(first(params.swap))
   const dismissedStale = first(params.stale) === 'ok'
   const panel = parsePanel(first(params.panel))
+  const risk = parseRisk(first(params.risk))
   // An unparseable league or rival ID falls back to global rather than
   // erroring, per section 8.2.
   const ownershipMode = ownershipModeOf(
@@ -214,6 +237,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             asId={asId}
             asLeagueId={asLeagueId}
             rating={rating}
+            risk={risk}
             scratchPairs={scratchPairs}
             swapFor={swapFor}
             dismissedStale={dismissedStale}
@@ -239,6 +263,7 @@ async function MatrixSection({
   asId,
   asLeagueId,
   rating,
+  risk,
   scratchPairs,
   swapFor,
   dismissedStale,
@@ -259,6 +284,7 @@ async function MatrixSection({
   asLeagueId: number | null
   /** Which fixture difficulty rating to score with (section 6.7). */
   rating: RatingSource
+  risk: RiskLevel
   /** Modelled transfers, oldest first (section 7.7). */
   scratchPairs: ScratchPair[]
   /** Squad player whose replacement panel is open, if any. */
@@ -526,6 +552,16 @@ async function MatrixSection({
                   sort={rawSort}
                   carry={carry}
                 />
+                {view === 'edge' && (
+                  <RiskSelector
+                    managerId={managerId}
+                    risk={risk}
+                    view={view}
+                    horizon={data.horizon}
+                    sort={rawSort}
+                    carry={carry}
+                  />
+                )}
                 <HorizonSelector
                   key={`${view}-${data.horizon}`}
                   managerId={managerId}
@@ -638,6 +674,66 @@ async function MatrixSection({
                   rivalId={rivalId}
                   swapHref={swapHref}
                   overLimitTeamIds={scratch.warnings.overLimitTeamIds}
+                  populationHref={populationHref}
+                />
+              </Suspense>
+            </>
+          ) : view === 'edge' ? (
+            <>
+              {/* The same population picker the Ownership view uses, so scope
+                  means one thing across the app and is chosen one way. */}
+              {panel === 'population' && (
+                <Overlay closeHref={closeOverlayHref} label="Compare against">
+                  <div className="max-h-[calc(100vh-6rem)] overflow-y-auto">
+                    <Suspense
+                      key={`edge-selector-${leagueId ?? 'none'}`}
+                      fallback={
+                        <OwnershipModeSelector
+                          managerId={managerId}
+                          manager={data.squad.manager}
+                          mode={ownershipMode}
+                          leagueId={leagueId}
+                          rivalId={rivalId}
+                          horizon={data.horizon}
+                          sort={sort}
+                          members={null}
+                          carry={carry}
+                          closeHref={closeOverlayHref}
+                        />
+                      }
+                    >
+                      <ModeSelectorSection
+                        managerId={managerId}
+                        manager={data.squad.manager}
+                        mode={ownershipMode}
+                        leagueId={leagueId}
+                        rivalId={rivalId}
+                        horizon={data.horizon}
+                        sort={sort}
+                        carry={carry}
+                        closeHref={closeOverlayHref}
+                      />
+                    </Suspense>
+                  </div>
+                </Overlay>
+              )}
+
+              {/* League scope fans out to fifty squads, so the lists stream in
+                  behind the controls rather than holding the page. */}
+              <Suspense
+                key={`edge-${ownershipMode}-${leagueId ?? rivalId ?? 'global'}-${risk}-${data.horizon}`}
+                fallback={<OwnershipLoading mode={ownershipMode} />}
+              >
+                <EdgeSection
+                  squad={viewData.squad}
+                  data={viewData}
+                  bootstrap={bootstrap}
+                  totalPlayers={data.totalPlayers}
+                  mode={ownershipMode}
+                  leagueId={leagueId}
+                  rivalId={rivalId}
+                  risk={risk}
+                  swapHref={swapHref}
                   populationHref={populationHref}
                 />
               </Suspense>
@@ -957,7 +1053,6 @@ async function OwnershipSection({
         ? null
         : buildPopulation({
             mode: 'league',
-            players,
             squad,
             totalPlayers,
             leagueId,
@@ -967,7 +1062,6 @@ async function OwnershipSection({
         ? null
         : buildPopulation({
             mode: 'rival',
-            players,
             squad,
             totalPlayers,
             leagueId: null,
@@ -981,7 +1075,6 @@ async function OwnershipSection({
       league ??
       (await buildPopulation({
         mode: 'global',
-        players,
         squad,
         totalPlayers,
         leagueId: null,
@@ -1032,14 +1125,12 @@ async function OwnershipSection({
 
 async function buildPopulation({
   mode,
-  players,
   squad,
   totalPlayers,
   leagueId,
   rivalId,
 }: {
   mode: ReferenceMode
-  players: Squad['startingXi']
   squad: Squad
   totalPlayers: number
   leagueId: number | null
@@ -1065,8 +1156,15 @@ async function buildPopulation({
     )
   }
 
+  // From bootstrap, so it covers every player rather than only the squad.
+  const { bootstrap } = await referenceContext()
   return globalPopulation(
-    new Map(players.map((player) => [player.id, player])),
+    new Map(
+      bootstrap.elements.map((element) => [
+        element.id,
+        element.selected_by_percent,
+      ])
+    ),
     squad.manager.overallRank,
     totalPlayers
   )
@@ -1184,4 +1282,113 @@ function EmptyState() {
       </p>
     </div>
   )
+}
+
+/**
+ * The Edge (section 7.9), behind its own Suspense boundary.
+ *
+ * It needs the same reference population the Ownership view builds, so it
+ * reuses `buildPopulation` rather than growing a second way to define scope.
+ * In league scope that is the fifty-squad fan-out, which is why this streams.
+ *
+ * The two layers are called in order and neither is adjusted here:
+ * `buildEdgeLists` runs the projection, then the strategy, and this component
+ * only renders what comes back.
+ */
+async function EdgeSection({
+  squad,
+  data,
+  bootstrap,
+  totalPlayers,
+  mode,
+  leagueId,
+  rivalId,
+  risk,
+  swapHref,
+  populationHref,
+}: {
+  squad: Squad
+  data: MatrixData
+  bootstrap: Awaited<ReturnType<typeof getBootstrap>>
+  totalPlayers: number
+  mode: ReferenceMode
+  leagueId: number | null
+  rivalId: number | null
+  risk: RiskLevel
+  swapHref: (playerId: number) => string
+  populationHref: string
+}) {
+  const players = [...squad.startingXi, ...squad.bench]
+
+  let reference: ReferencePopulation
+  try {
+    reference = await buildPopulation({
+      mode,
+      squad,
+      totalPlayers,
+      leagueId,
+      rivalId,
+    })
+  } catch (error) {
+    const fplError =
+      error instanceof FplApiError
+        ? error
+        : new FplApiError('unavailable', 'Could not build the comparison.')
+    return <ErrorNotice kind={fplError.kind} message={fplError.message} />
+  }
+
+  // Only in rival scope, and only ever a rival's own chips. A failure here
+  // costs the strip and nothing else: the lists do not depend on it.
+  let chips = null
+  if (mode === 'rival' && rivalId !== null) {
+    try {
+      const history = await getEntryHistory(rivalId)
+      chips = remainingChips(history.chips)
+    } catch {
+      chips = null
+    }
+  }
+
+  const lists = buildEdgeLists({
+    bootstrap,
+    fixtures: data.fixtures,
+    squad: players,
+    startGameweek: data.startGameweek,
+    horizon: data.horizon,
+    matchesPlayed: data.matchesPlayed,
+    reference,
+    risk,
+  })
+
+  const gameweeks = horizonGameweeks(data.startGameweek, data.horizon).length
+
+  return (
+    <div className="space-y-4">
+      <PopulationButton href={populationHref} label={reference.label} />
+      <EdgeLists
+        buy={lists.buy}
+        sell={lists.sell}
+        directionLine={describeDirection(
+          reference.standing.position,
+          risk,
+          scopeSubject(reference)
+        )}
+        chips={chips}
+        rivalName={mode === 'rival' ? reference.label : null}
+        swapHref={swapHref}
+        horizonGameweeks={gameweeks}
+      />
+    </div>
+  )
+}
+
+/** How the direction line names the population it is talking about. */
+function scopeSubject(reference: ReferencePopulation): string {
+  if (reference.mode === 'global') {
+    return 'the field'
+  }
+  if (reference.mode === 'rival') {
+    return reference.label
+  }
+  return reference.label
 }
