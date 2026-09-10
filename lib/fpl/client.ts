@@ -45,7 +45,63 @@ type FplFetchOptions = {
   tags?: string[]
 }
 
-export async function fplFetch<T>(
+/**
+ * Requests currently in flight, so identical ones share a single upstream call.
+ *
+ * ## What this catches, and what it does not
+ *
+ * The Data Cache only helps once a response has arrived. Until then it is
+ * empty, so a burst of readers opening the same cold league each start their
+ * own fetch: fifty managers times however many readers, all asking FPL the
+ * same questions at the same moment. Coalescing collapses that back to one
+ * call per distinct URL, with the rest awaiting the same promise.
+ *
+ * **It is per instance.** Two Vercel instances serving the same league at the
+ * same moment still make two calls. Deduplicating across instances needs
+ * shared state, which means a paid store and breaks section 8.4's zero-cost
+ * constraint. Within an instance is where the multiplication actually happens,
+ * because that is where a fan-out of fifty lives.
+ *
+ * This is **not** a cache: entries live only while the request is in flight
+ * and are dropped the moment it settles, success or failure. A rejection is
+ * shared by everyone already waiting — they asked the same question at the
+ * same time and it has the same answer — but the next caller retries rather
+ * than inheriting a stale failure. Section 8.3's rule that failures are never
+ * cached is unaffected.
+ *
+ * Next's own fetch memoization does not cover this: it is scoped to a single
+ * render pass, and does not apply in Route Handlers at all.
+ */
+const inFlight = new Map<string, Promise<unknown>>()
+
+export function fplFetch<T>(
+  path: string,
+  options: FplFetchOptions
+): Promise<T> {
+  // Keyed on the cache config as well as the URL. Two callers asking for the
+  // same path with different revalidate windows are asking different
+  // questions, and the second must not silently inherit the first's lifetime.
+  const key = `${path}|${options.revalidate}|${(options.tags ?? []).join(',')}`
+
+  const existing = inFlight.get(key)
+  if (existing) {
+    return existing as Promise<T>
+  }
+
+  const request = fetchFromFpl<T>(path, options).finally(() => {
+    inFlight.delete(key)
+  })
+
+  inFlight.set(key, request)
+  return request
+}
+
+/** How many identical requests are being shared right now. For tests. */
+export function inFlightCount(): number {
+  return inFlight.size
+}
+
+async function fetchFromFpl<T>(
   path: string,
   { revalidate, tags }: FplFetchOptions
 ): Promise<T> {

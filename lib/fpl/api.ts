@@ -6,7 +6,9 @@ import {
   CACHE_SECONDS,
   CACHE_TAGS,
   MIN_PICKS_CACHE_SECONDS,
+  SEASON_END_BUFFER_SECONDS,
   SEASON_OVER_PICKS_CACHE_SECONDS,
+  SETTLED_PICKS_CACHE_SECONDS,
 } from './config'
 import { fplFetch } from './client'
 import { FplApiError } from './errors'
@@ -76,9 +78,29 @@ export function getFixtures(): Promise<FplFixture[]> {
 /**
  * A manager's fifteen players for a gameweek.
  *
- * Cached for the rest of the gameweek: picks are immutable once the deadline
- * has passed, and the score in `entry_history` stops moving when the gameweek
- * ends, so the entry is good until the next deadline.
+ * ## Two cache lifetimes, decided per gameweek
+ *
+ * The URL carries both the manager and the gameweek, so the Data Cache is
+ * already keyed by the pair. What varies is how long an entry is good for, and
+ * the answer is not the same for every gameweek.
+ *
+ * **The picks are immutable the moment the deadline passes.** The rest of the
+ * payload is not: `entry_history` carries the gameweek's points and rank, and
+ * those keep moving while matches are played and again when bonus is applied.
+ * Caching the whole response for the season on the strength of the picks alone
+ * would freeze a score at whatever it read mid-match.
+ *
+ * So the lifetime follows `data_checked`, which is FPL's own flag for "this
+ * gameweek is final, bonus included":
+ *
+ * - **Settled** (`finished && data_checked`) — nothing in the response can
+ *   change again, so it is held to the end of the season.
+ * - **Anything else** — the current gameweek, or a finished one still waiting
+ *   on bonus — is held only until the next deadline, as before.
+ *
+ * That is the whole win: in a 38-gameweek season all but the newest gameweek
+ * is settled, and a league's fifty squads for a past gameweek are fetched once
+ * rather than once a week.
  *
  * Takes `events` rather than loading bootstrap itself so a caller that has
  * already resolved the gameweek does not look it up twice.
@@ -94,7 +116,7 @@ export async function getPicks(
     return await fplFetch<FplPicks>(
       `/entry/${managerId}/event/${gameweek}/picks/`,
       {
-        revalidate: secondsUntilNextDeadline(events),
+        revalidate: picksCacheSeconds(events, gameweek),
         tags: [CACHE_TAGS.PICKS],
       }
     )
@@ -206,6 +228,51 @@ function assertGameweekIsPlayable(events: FplEvent[], gameweek: number): void {
       `Squads for gameweek ${gameweek} are private until the deadline on ${event.deadline_time}.`
     )
   }
+}
+
+/**
+ * How long one gameweek's picks stay cacheable.
+ *
+ * A gameweek FPL has marked `data_checked` is final — picks, points, rank and
+ * bonus all settled — so the response is good until the season rolls over and
+ * the same URL starts meaning next season's gameweek 3. Everything else is
+ * still moving and gets the short lifetime.
+ *
+ * A gameweek missing from `events` is treated as unsettled. The caller has
+ * already rejected unknown gameweeks, so this only guards against bootstrap
+ * being older than the gameweek being asked for.
+ */
+export function picksCacheSeconds(
+  events: FplEvent[],
+  gameweek: number
+): number {
+  const event = events.find((candidate) => candidate.id === gameweek)
+  if (event?.finished && event.data_checked) {
+    return secondsUntilSeasonEnd(events)
+  }
+  return secondsUntilNextDeadline(events)
+}
+
+/**
+ * Seconds until this season's data stops being this season's.
+ *
+ * Measured from the last deadline plus a buffer, because that final gameweek
+ * still has to be played and scored after its deadline passes, and nothing in
+ * the payload says "the season is over" more directly.
+ *
+ * Floored at the short duration so a season already past its end never
+ * produces a zero or negative lifetime, which would disable caching entirely
+ * at exactly the moment traffic is cheapest to serve.
+ */
+export function secondsUntilSeasonEnd(events: FplEvent[]): number {
+  const last = events[events.length - 1]
+  if (!last) {
+    return SETTLED_PICKS_CACHE_SECONDS
+  }
+
+  const remaining =
+    last.deadline_time_epoch + SEASON_END_BUFFER_SECONDS - nowInSeconds()
+  return Math.max(MIN_PICKS_CACHE_SECONDS, remaining)
 }
 
 /**

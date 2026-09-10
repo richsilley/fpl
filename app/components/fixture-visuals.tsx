@@ -158,6 +158,43 @@ export function FixtureCell({ fixtures }: { fixtures: TeamFixture[] }) {
 const MIN_DISPLAYED_STRENGTH = 0.5
 
 /**
+ * Team Strength gets its own colour bands, not Fixture Score's.
+ *
+ * The two share a 0-to-10 axis and nothing else. **Fixture Score clusters**:
+ * it is built from FDR, an all-average run scores exactly 6.0, and real runs
+ * sit close to that, so bands at 6.0 +/- 0.5 and +/- 1.5 put most of the table
+ * in the middle and pick out the genuine outliers.
+ *
+ * **Team Strength is uniform by construction.** It is a linear rescale of the
+ * twenty clubs between the weakest and the strongest, so the values are spread
+ * evenly across the range and its midpoint is 5.0, not 6.0. Read through
+ * Fixture Score's bands, a one-point-wide neutral zone sitting half a point
+ * above the true middle caught almost nothing: eighteen of twenty clubs came
+ * out either green or red, which says only "above or below average" and hides
+ * the difference between a mid-table side and a genuinely strong one.
+ *
+ * Wider middle, centred on 5.0. Roughly a fifth of the league now reads as
+ * unremarkable, which is the honest answer for a mid-table club.
+ */
+const STRENGTH_BANDS = { high: 7.5, mid: 6, low: 4, bottom: 2.5 }
+
+export function strengthTone(strength: number): string {
+  if (strength >= STRENGTH_BANDS.high) {
+    return 'bg-emerald-200 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50'
+  }
+  if (strength >= STRENGTH_BANDS.mid) {
+    return 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-100'
+  }
+  if (strength >= STRENGTH_BANDS.low) {
+    return 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
+  }
+  if (strength >= STRENGTH_BANDS.bottom) {
+    return 'bg-rose-100 text-rose-900 dark:bg-rose-900/50 dark:text-rose-100'
+  }
+  return 'bg-rose-200 text-rose-950 dark:bg-rose-800 dark:text-rose-50'
+}
+
+/**
  * Team Strength: how in form a club is, 0 to 10, on the same colour bands as
  * Fixture Score.
  *
@@ -178,7 +215,7 @@ export function StrengthBadge({
       title={`Team Strength ${shown} of 10`}
       className={`inline-flex items-baseline rounded px-1.5 py-0.5 tabular-nums ${
         compact ? 'text-[11px]' : 'text-sm'
-      } ${scoreTone(value)}`}
+      } ${strengthTone(value)}`}
     >
       <span className="font-semibold">{shown}</span>
       <span className="sr-only"> team strength out of 10</span>

@@ -418,3 +418,73 @@ export function carriedFields(
   const params = new URLSearchParams(href.slice(href.indexOf('?') + 1))
   return [...params.entries()].map(([name, value]) => ({ name, value }))
 }
+
+/**
+ * Fixtures sort (section 7.2).
+ *
+ * The same shape as the Form sort: a `squad` value meaning "no sort", and
+ * field-direction pairs for the two summary columns. Squad order is the
+ * default because the fifteen rows arrive in a meaningful order — starting XI
+ * then bench, in position order — which is information a score sort discards.
+ *
+ * **The field names deliberately match `CLUB_SORTS`.** Both views measure the
+ * same two things, so leaving Fixtures sorted by strength and switching to
+ * Teams lands on a table sorted by strength, which is what a reader carrying
+ * a question between the two views wants. `squad` has no Teams equivalent and
+ * falls back to that view's default, which is right: there is no squad order
+ * for twenty clubs.
+ */
+export type FixturesSortField = 'squad' | 'score' | 'strength'
+
+export type FixturesSort =
+  'squad' | `${Exclude<FixturesSortField, 'squad'>}-${'asc' | 'desc'}`
+
+/** Squad order: starting XI then bench, as section 7.1 loads them. */
+export const DEFAULT_FIXTURES_SORT: FixturesSort = 'squad'
+
+const SORTABLE_FIXTURES_FIELDS: Exclude<FixturesSortField, 'squad'>[] = [
+  'score',
+  'strength',
+]
+
+export function parseFixturesSort(value: string | undefined): FixturesSort {
+  if (value === 'squad') {
+    return 'squad'
+  }
+  const [field, direction] = (value ?? '').split('-')
+  const known =
+    SORTABLE_FIXTURES_FIELDS.includes(
+      field as Exclude<FixturesSortField, 'squad'>
+    ) &&
+    (direction === 'asc' || direction === 'desc')
+  return known ? (value as FixturesSort) : DEFAULT_FIXTURES_SORT
+}
+
+export function splitFixturesSort(sort: FixturesSort): {
+  field: FixturesSortField
+  descending: boolean
+} {
+  if (sort === 'squad') {
+    return { field: 'squad', descending: false }
+  }
+  const [field, direction] = sort.split('-')
+  return { field: field as FixturesSortField, descending: direction === 'desc' }
+}
+
+/**
+ * Both columns open descending: "who has the best run" and "who is strongest"
+ * are the questions being asked, and clicking the active column reverses.
+ */
+export function nextFixturesSort(
+  field: FixturesSortField,
+  current: FixturesSort
+): FixturesSort {
+  if (field === 'squad') {
+    return 'squad'
+  }
+  const active = splitFixturesSort(current)
+  if (active.field !== field) {
+    return `${field}-desc`
+  }
+  return `${field}-${active.descending ? 'asc' : 'desc'}`
+}

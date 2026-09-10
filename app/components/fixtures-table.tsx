@@ -4,13 +4,23 @@ import {
   StrengthBadge,
 } from '@/app/components/fixture-visuals'
 import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
+import Link from 'next/link'
+
 import {
   MATRIX_HEADER_HEIGHT,
   MATRIX_PLAYER_COLUMN,
-  MATRIX_PLAYER_COLUMN_END,
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
 import { fixtureScore, fixturesFor, horizonGameweeks } from '@/lib/fpl/fixtures'
+
+import {
+  buildHref,
+  type CarriedState,
+  type FixturesSort,
+  type FixturesSortField,
+  nextFixturesSort,
+  splitFixturesSort,
+} from '@/lib/fpl/params'
 import type { SquadPlayer } from '@/lib/fpl/squad'
 import type { MatrixData } from '@/lib/fpl/views'
 
@@ -18,8 +28,14 @@ import type { MatrixData } from '@/lib/fpl/views'
  * View 1, Fixtures (section 7.2). "Where are my fixture problems?"
  *
  * Columns are the gameweeks in the selected horizon, plus the Fixture Score
- * summary. The player column is frozen and the gameweeks scroll, which is the
- * section 8.5 pattern.
+ * summary. **Only the player column is frozen** and everything else scrolls,
+ * which is the section 8.5 pattern.
+ *
+ * Fixture Score used to be pinned beside it. Two pinned columns cost about
+ * half a phone's width before a single gameweek is visible, which defeats the
+ * view: the reader came to read the run of fixtures, and the summary of that
+ * run was covering it. It is a normal column now and scrolls away like the
+ * rest.
  *
  * The cell and badge rendering, and the two colour scales, live in
  * ./fixture-visuals so Club Blocks (7.5) draws the same fixtures the same way.
@@ -46,14 +62,37 @@ export function FixturesTable({
   view,
   swapHref,
   overLimitTeamIds,
+  managerId,
+  sort,
+  carry,
 }: {
   view: MatrixData
   /** Opens the replacement panel for a player (section 7.7). Null disables it. */
   swapHref: ((playerId: number) => string) | null
   /** Clubs over the three-per-club limit, for the row accent (section 7.7). */
   overLimitTeamIds: Set<number>
+  managerId: string
+  sort: FixturesSort
+  /** Carried untouched so sorting stays on this view (section 8.2). */
+  carry: CarriedState
 }) {
   const { squad, startGameweek, horizon } = view
+  const active = splitFixturesSort(sort)
+
+  const sortHref = (field: FixturesSortField) =>
+    buildHref({
+      id: managerId,
+      view: 'fixtures',
+      horizon,
+      sort: nextFixturesSort(field, sort),
+      ...carry,
+    })
+
+  // Sorted inside each group, so the starting XI and the bench stay separate
+  // however the table is ordered. The split is structural (section 7.1), not
+  // a default ordering to be discarded on the first click.
+  const startingXi = sortPlayers(squad.startingXi, sort, view)
+  const bench = sortPlayers(squad.bench, sort, view)
 
   // The horizon drives the columns, not just the score: selecting five
   // gameweeks shows five columns. Gameweeks outside the window are not dimmed
@@ -80,28 +119,47 @@ export function FixturesTable({
 
         <thead>
           <tr className={MATRIX_HEADER_HEIGHT}>
-            <th
-              scope="col"
-              className={`sticky left-0 z-20 border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${PLAYER_COLUMN}`}
+            {/* The way back to squad order, exactly as the Form view does it:
+                clicking a sorted column only ever flips its direction, so the
+                Player header is the only reset there can be, and it says so
+                whenever a sort is applied. */}
+            <SortableHeader
+              href={sortHref('squad')}
+              active={active.field === 'squad'}
+              descending={false}
+              sortable={false}
+              align="left"
+              className={`sticky left-0 z-20 border-r ${PLAYER_COLUMN}`}
+              title="Back to squad order: starting XI, then bench"
             >
               Player
-            </th>
-            <th
-              scope="col"
-              className={`sticky z-20 border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
+              {active.field !== 'squad' && (
+                <span className="ml-1.5 font-normal text-neutral-500 dark:text-neutral-400">
+                  <span aria-hidden>&#8634;</span> squad order
+                </span>
+              )}
+            </SortableHeader>
+
+            {/* Section 6.4: labelled Fixture Score, never FDR. */}
+            <SortableHeader
+              href={sortHref('score')}
+              active={active.field === 'score'}
+              descending={active.descending}
+              className={SCORE_COLUMN}
+              title="Sum of 6 minus difficulty across the horizon, then the number of fixtures. Higher is better."
             >
-              {/* Section 6.4: labelled Fixture Score, never FDR. */}
-              <span title="Sum of 6 minus difficulty across the horizon, then the number of fixtures. Higher is better.">
-                Fixture Score
-              </span>
-            </th>
-            <th
-              scope="col"
+              Fixture Score
+            </SortableHeader>
+
+            <SortableHeader
+              href={sortHref('strength')}
+              active={active.field === 'strength'}
+              descending={active.descending}
+              className={STRENGTH_COLUMN}
               title="How strong the player's club is right now, on the same 0 to 10 scale as Fixture Score. Always this app's figure — FPL publishes no form-aware strength, so it does not change with the difficulty toggle"
-              className={`border-b border-l border-neutral-100 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 dark:border-neutral-800/70 dark:bg-neutral-800 dark:text-neutral-300 ${STRENGTH_COLUMN}`}
             >
               Team Strength
-            </th>
+            </SortableHeader>
             {columns.map((gameweek) => (
               <th
                 key={gameweek}
@@ -125,7 +183,7 @@ export function FixturesTable({
         </thead>
 
         <tbody>
-          {squad.startingXi.map((player) => (
+          {startingXi.map((player) => (
             <PlayerRow
               key={player.id}
               player={player}
@@ -147,7 +205,7 @@ export function FixturesTable({
             </th>
           </tr>
 
-          {squad.bench.map((player) => (
+          {bench.map((player) => (
             <PlayerRow
               key={player.id}
               player={player}
@@ -215,17 +273,17 @@ function PlayerRow({
         </span>
       </th>
 
+      {/* Not pinned. Two frozen columns leave a phone almost no room for the
+          gameweeks, which are the reason the view exists. */}
       <td
-        className={`sticky z-10 border-b border-r border-neutral-200 px-2 py-1.5 text-right dark:border-neutral-800 ${rowBackground} ${MATRIX_PLAYER_COLUMN_END} ${SCORE_COLUMN}`}
+        className={`border-b border-r border-neutral-200 px-2 py-1.5 text-right dark:border-neutral-800 ${rowBackground} ${SCORE_COLUMN}`}
       >
         <ScoreBadge summary={summary} />
       </td>
 
       {/* Team Strength, as the Teams view shows it: how good the run is, and
           how good the club is, are two different questions and a fixture score
-          means something different against a strong side than a weak one. Not
-          frozen — two pinned columns leave a phone almost no room to scroll
-          the gameweeks. */}
+          means something different against a strong side than a weak one. */}
       <td
         className={`border-b border-l border-neutral-100 px-2 py-1.5 text-right dark:border-neutral-800/70 ${rowBackground} ${STRENGTH_COLUMN}`}
       >
@@ -253,5 +311,110 @@ function PlayerRow({
         className={`w-auto border-b border-neutral-100 dark:border-neutral-800/70 ${rowBackground}`}
       />
     </tr>
+  )
+}
+
+/**
+ * The value a column sorts on, which is always the value it displays.
+ *
+ * Fixture Score is recomputed per player rather than cached on the row,
+ * because it is the same call the cell makes and the fifteen-row cost is
+ * nothing next to fetching the fixtures in the first place.
+ */
+function sortValue(
+  player: SquadPlayer,
+  field: FixturesSortField,
+  view: MatrixData
+): number {
+  switch (field) {
+    case 'score':
+      return fixtureScore(
+        view.fixtures,
+        player.teamId,
+        view.startGameweek,
+        view.horizon
+      ).score
+    case 'strength':
+      return view.teamStrength.get(player.teamId) ?? 0
+    default:
+      return player.squadPosition
+  }
+}
+
+function sortPlayers(
+  players: SquadPlayer[],
+  sort: FixturesSort,
+  view: MatrixData
+): SquadPlayer[] {
+  const { field, descending } = splitFixturesSort(sort)
+  if (field === 'squad') {
+    return [...players].sort((a, b) => a.squadPosition - b.squadPosition)
+  }
+
+  return [...players].sort((a, b) => {
+    const difference = sortValue(a, field, view) - sortValue(b, field, view)
+    // Ties fall back to squad order, so equal scores keep a stable and
+    // meaningful order rather than whatever the sort happens to do. Eleven
+    // players from six clubs produce a lot of ties.
+    return difference !== 0
+      ? difference * (descending ? -1 : 1)
+      : a.squadPosition - b.squadPosition
+  })
+}
+
+/**
+ * A header that is also a sort link.
+ *
+ * The same shape as the Form view's, deliberately: the two tables sit one tab
+ * apart and a header that sorted differently in each would be a trap.
+ */
+function SortableHeader({
+  href,
+  active,
+  descending,
+  align = 'right',
+  sortable = true,
+  className,
+  title,
+  children,
+}: {
+  href: string
+  active: boolean
+  descending: boolean
+  align?: 'left' | 'right'
+  sortable?: boolean
+  className: string
+  title?: string
+  children: React.ReactNode
+}) {
+  return (
+    <th
+      scope="col"
+      title={title}
+      aria-sort={!active ? 'none' : descending ? 'descending' : 'ascending'}
+      className={`border-b border-neutral-200 bg-neutral-50 p-0 font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${className}`}
+    >
+      <Link
+        href={href}
+        scroll={false}
+        className={`flex h-full items-center gap-0.5 px-2 py-2 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+          align === 'left' ? 'justify-start' : 'justify-end'
+        }`}
+      >
+        <span>{children}</span>
+        {sortable && (
+          <span
+            aria-hidden
+            className={`text-[9px] ${
+              active
+                ? 'text-neutral-900 dark:text-neutral-100'
+                : 'text-neutral-300 dark:text-neutral-600'
+            }`}
+          >
+            {active && !descending ? '▴' : '▾'}
+          </span>
+        )}
+      </Link>
+    </th>
   )
 }

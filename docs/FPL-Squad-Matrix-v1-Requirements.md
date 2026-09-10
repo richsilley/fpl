@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.25
+**Version:** 1.27
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -341,6 +341,8 @@ teamStrength = 10 x (strength[club] - min) / (max - min)
 
 Immediately right of Fixture Score, on the same 0 to 10 scale with the same colour bands, so the two read as a pair: how good the run is, and how good the club is. An easy run for a weak side is a different proposition from an easy run for a strong one. Sortable, one decimal place.
 
+**Team Strength has its own colour bands, not Fixture Score's.** The two share a 0-to-10 axis and nothing else. Fixture Score clusters: it is built from FDR, an all-average run scores exactly 6.0, and real runs sit near it, so bands at 6.0 ± 0.5 and ± 1.5 hold most of the table in the middle and pick out genuine outliers. Team Strength is uniform by construction — a linear rescale of the twenty clubs between weakest and strongest — and its midpoint is 5.0, not 6.0. Read through Fixture Score's bands, a one-point neutral zone sitting half a point above the true middle caught almost nothing: eighteen of twenty clubs came out green or red, which says only "above or below average" and hides the difference between a mid-table side and a strong one. Bands are 7.5 / 6.0 / 4.0 / 2.5, which spreads the league 5/3/4/3/5. **Colour only**: nothing that sorts, ranks or floors a value sees them.
+
 **Both horizon views carry it**, on the Fixtures view against each player's club. The pair answers one question, and it would be odd for the answer to be available on one of the two views that ask it. On Fixtures it is not frozen — two pinned columns leave a phone almost no room to scroll the gameweeks — so Fixture Score stays with the name and Team Strength is the first column to scroll.
 
 **The displayed value is floored at 0.5; the calculation is unchanged.** The scale is linear across the twenty clubs, so whichever club is bottom lands on exactly 0.0 by construction — and a lone "0.0" in a column of real numbers reads as a figure that failed to load rather than as the weakest side in the league. The floor is applied at render only: sorting, ranking and the colour bands all see the true value, so the bottom club is still bottom and still shaded as such.
@@ -385,6 +387,16 @@ All six describe the gameweek on screen rather than live values, which is why th
 
 The header is sticky and carries the menu button; see 7.8 for the shell it sits in.
 
+#### 7.1.0 The empty state
+
+Before any squad is loaded there is no header, so the title, the ID form and the instructions stay on the page.
+
+**"Find your manager ID"** — the mobile-app caveat, four numbered steps, and the example address with the number picked out. The example **wraps rather than scrolls**: kept on one line a phone pushes the highlighted number off the right edge, hiding the only part that matters.
+
+**"…and read their Manager ID the same way."** Not "their number". The page has just spent four steps teaching a name for this value; reverting to "number" in the last line makes the reader check whether a different thing is meant.
+
+**The closing note is a callout, not a footnote**: *Best on a laptop or tablet. The tables run wide, and a phone means a lot of sideways scrolling.* Tinted and ruled, with the first sentence bold. It is the one line that sets expectations about the device, and as grey small print under a bordered card it was the least prominent thing on the page while being the thing most worth reading first — a phone user who misses it meets a table that scrolls sideways and concludes the app is broken.
+
 #### 7.1.1 Viewing another manager's squad
 
 Any of the user's league rivals can be loaded into **all four views**, so the whole matrix can be pointed at someone else's squad.
@@ -410,7 +422,7 @@ The control is a two-step cascade — **View as → from league → team** — a
 - **Columns are the gameweeks in the selected horizon**, starting at the current one. Selecting 5 shows five columns; selecting 1 shows one. Gameweeks outside the window are not dimmed or banded, they are not rendered. **All** shows the rest of the season, through GW38
 - Column headers read `GW3`, `GW4` and so on, not bare numbers
 - Each cell shows the opponent, home/away indicator, and is shaded by FDR
-- Player name column is frozen; gameweek columns scroll horizontally
+- **Only the player name column is frozen**; everything else, Fixture Score and Team Strength included, scrolls horizontally
 - Blanks shown as empty cells, doubles as split cells
 - A summary column shows the **Fixture Score** (section 6) over a user-selected horizon, displayed as score with fixture count in brackets
 - Horizon control per section 7.6
@@ -432,6 +444,12 @@ Below the table, on both horizon views. Three definitions, then why two of them 
 **All three modes are described at all times. Do not swap the text for whichever mode is selected.** It used to, which meant the only way to find out what a mode did was to switch to it — backwards, since the paragraph exists to help the reader choose. Keeping all three also keeps the block a fixed height, so nothing below it moves when the mode changes.
 
 It is roughly half its former length. The removed material explained that a fixture cell's number and the summary number meant opposite things; cells no longer print a number at all (6.7), so the mismatch it warned about cannot arise, and the warning was the longest thing in the block.
+
+**Fixture Score is not pinned.** It was, beside the name column. Two frozen columns cost roughly half a phone's width before a single gameweek is visible, so the summary of the run was covering the run it summarises — on the device 8.5 names as the primary target. One frozen column is the rule for every table in the app.
+
+**Sortable by Fixture Score and Team Strength**, with the Player header as the way back to squad order. Identical in behaviour to the Form view (7.3): sorting happens inside each group so the starting XI and the bench stay separate, clicking a sorted column only flips its direction, and ties fall back to squad order — which matters more here than anywhere else, since eleven players drawn from six clubs produce a great many equal scores.
+
+The sort field names are deliberately the same as the Teams view's, so leaving Fixtures sorted by strength and switching to Teams lands on a table sorted by strength. A reader carrying a question between the two views keeps their place in it.
 
 **The horizon selects the columns, not just the score.** Banding the horizon inside a full-season table was the earlier behaviour and is superseded: the matrix now only ever shows the run being scored, so the summary column and the cells beside it always describe the same gameweeks.
 
@@ -644,6 +662,20 @@ All three populations are built. `compareOwnership` is the one function section 
 
 **Global mode shows two columns, Global and Flag.** The reference population *is* the global one, so a reference figure would repeat the global one and the difference would always be zero. For a while those columns stayed and were dashed, to stop the table changing shape on a mode switch; that is superseded by the rule in 7.4 above — the frozen player column is pinned to the shared width, so the part that must not move does not, and four dead columns on the view most people open first cost more than the reflow did.
 
+#### 7.4.3 Hardening the fan-out
+
+Three separate protections, because they fail in different ways.
+
+**Bounded parallelism, 8 at a time.** In series, fifty calls is minutes and exceeds any function timeout. All fifty at once, multiplied across simultaneous readers, is thousands of requests a minute at fantasy.premierleague.com from a handful of Vercel IP ranges. The API is undocumented and unsupported, so being throttled or blocked has no appeals process and would leave the app with no data source at all. Eight is a ceiling on the blast radius, not a performance dial: it is nowhere near the bottleneck, and raising it to chase a faster cold load trades a risk that ends the project for a saving measured in tens of milliseconds.
+
+**Two cache lifetimes for picks, chosen by `data_checked`.** See 8.3. A settled gameweek is held for the rest of the season, so a league's fifty squads for a past gameweek are fetched once rather than weekly.
+
+**In-flight coalescing.** The Data Cache only helps after a response exists. Until then, readers arriving together on the same cold league each start their own fan-out. Concurrent identical requests now share one upstream call. It is per instance — deduplicating across instances needs shared state, which carries platform fees and breaks 8.4 — and per instance is where the multiplication happens, because that is where a fan-out of fifty lives.
+
+**Measured on production**, eight cold 50-manager leagues in quick succession: median 569ms, worst 814ms, against a 3-second target. Warm: median 259ms. Eight simultaneous readers on eight different cold leagues completed in 933ms wall clock across eight instances, with no failures, and runtime logs showed no errors, timeouts or empty responses.
+
+**`maxDuration` is stated explicitly** on the league route as well as the page. The route itself is quick, but the platform default is a property of the deployment target rather than of this code, and neither should be silently retimed by a platform change.
+
 **Fetching cost and why the cap exists.** A single `picks/` call takes well over a second, so fifty in series would be well over a minute. They run eight at a time: fifty squads land in about six seconds cold, and under a second and a half once cached. Each manager's picks are cached for the rest of the gameweek by the same rule as the user's own (8.3), so that cost falls once per league per gameweek, not once per page view.
 
 **The fan-out is streamed.** The squad header, tabs and population selector render immediately and the table arrives when the fan-out completes, rather than the whole page waiting. The page also raises its execution ceiling above the platform default, which a cold fifty-squad load would otherwise exceed.
@@ -798,7 +830,7 @@ The app is four views over one squad. Everything else is chrome, and chrome had 
 
 Contents, headings in sentence case:
 
-- **Load a squad** — the Manager ID field and the **Load squad** button, then: *Your ID is the number after `/entry/` in the address bar on the FPL website. It doesn't appear in the mobile app.* The same instruction as the empty state (7.1), because by the time a squad is loaded the empty state is gone and this is the only place left to ask
+- **Load a squad** — the Manager ID field and the **Load squad** button, then: *Your ID is the number after `/entry/` in the address bar on the FPL website. It doesn't appear in the mobile app.* The same instruction as the empty state (7.1), because by the time a squad is loaded the empty state is gone and this is the only place left to ask. **The site is linked**, opening in a new tab: the instruction sends the reader somewhere and then leaves them to type the address out, while a dialog they are mid-task in would be lost behind it
 - **Or load from a league** — the two dropdowns, then: *Loads that manager's squad in place of your own. Your scratch changes are kept and can be reset at any time.* Not "View as another manager", which implies a mode to enter and leave rather than what actually happens, which is the same squad swap as the section above by a different route
 
 **The manager dropdown is always visible, disabled until a league is chosen.** It used to be absent entirely, on the reasoning that a control which does nothing is worse than one that is not there. That left the first dropdown looking like the whole feature, with no sign that a second step followed, so choosing a league appeared to do nothing at all. A greyed control announces the step and says it is not your turn yet; a missing one announces nothing.
@@ -807,7 +839,11 @@ Before a squad is loaded there is no header and no Options button, so the title 
 
 #### The header is the one permanent bar
 
-**Sticky at every width**, because whose squad you are looking at is the fact every view depends on, and the menu button travels with it. The scratch-squad strip (7.7) rides in the same sticky container, so the two can never overlap.
+**Sticky at every width**, because whose squad you are looking at is the fact every view depends on, and the Options button travels with it. The scratch-squad strip (7.7) and the view tabs ride in the same sticky container, so none of the three can overlap another.
+
+**The view tabs are in the sticky stack too.** The app is four views over one squad, so switching between them is the primary act; a full-season Fixtures table runs long enough that scrolling used to strand the reader with no way across without returning to the top. All three bars pad back to the same gutter as the content.
+
+**The header carries the manager ID** alongside the team and manager names, as a quiet monospaced chip. It is the one value a reader has to hand to somebody else for them to reproduce what is on screen, and it otherwise appears only in the address bar. It sits beside the name it belongs to, so while a borrowed squad is loaded (7.1.1) the ID shown is unambiguously that squad's and not the reader's own.
 
 On a phone the six tiles would eat a third of the screen while stuck to the top, so they collapse to a single line of small text. The identity and the menu, which is what the bar is really for, stay at every width.
 
@@ -841,7 +877,9 @@ The sticky bars bleed to the window edge but pad themselves back to the same gut
 
 #### 7.8.2 The rows are clickable, and the page says so
 
-A line under the subtitle on Fixtures, Form and Ownership: *Click any player to try a replacement. Candidates are ranked by the view you're in, so here you'll see …, while the … tab ranks the same players by … instead.*
+A line **directly above the table** on Fixtures, Form and Ownership: *Click any player to try a replacement. Candidates are ranked by the view you're in, so here you'll see …, while the … tab ranks the same players by … instead.*
+
+**Above the table, not under the subtitle, and smaller than it.** It is an aside about how to work the rows, so it belongs beside them rather than in the block that says what the view is for. Sitting under the subtitle at subtitle size it read as a second subtitle, gave the heading block three lines of prose before any data, and pushed the table further down a page whose whole point is the table.
 
 Scratch squad editing (7.7) is the largest feature in the app and its entry point is an underline on a player name. Nothing said it was there.
 

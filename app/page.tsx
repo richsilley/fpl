@@ -28,6 +28,7 @@ import {
   ownershipModeOf,
   parseClubSort,
   parseEntityId,
+  parseFixturesSort,
   parseFormSort,
   parsePanel,
   parseRating,
@@ -393,6 +394,23 @@ async function MatrixSection({
           dismissHref={`${dismissStaleHref}&stale=ok`}
           showDropped={!dismissedStale}
         />
+
+        {/* The tabs ride in the sticky stack too. They are the primary act in
+            an app that is four views over one squad, and on a long table
+            scrolling used to strand the reader with no way across without
+            going back to the top. Same gutter as the bars above so all three
+            line up with the content. */}
+        <div className="border-b border-neutral-200 bg-white/95 px-5 pb-2 pt-2 backdrop-blur sm:px-8 lg:px-12 dark:border-neutral-800 dark:bg-neutral-900/90">
+          <div className="mx-auto w-full max-w-[1600px]">
+            <ViewTabs
+              managerId={managerId}
+              view={view}
+              horizon={data.horizon}
+              sort={rawSort}
+              carry={carry}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="mx-auto w-full max-w-[1600px] space-y-5">
@@ -404,7 +422,19 @@ async function MatrixSection({
                 <>
                   Your ID is the number after <code>/entry/</code> in the
                   address bar on the FPL website. It doesn&rsquo;t appear in the
-                  mobile app.
+                  mobile app.{' '}
+                  {/* The instruction sends the reader to a site it does not
+                      link to, which leaves them to type it out. New tab: the
+                      dialog is mid-task and losing it would lose the ID they
+                      came back with. */}
+                  <a
+                    href="https://fantasy.premierleague.com"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="font-medium text-neutral-700 underline underline-offset-2 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100"
+                  >
+                    fantasy.premierleague.com
+                  </a>
                 </>
               }
             >
@@ -440,14 +470,6 @@ async function MatrixSection({
           </AppMenu>
         )}
 
-        <ViewTabs
-          managerId={managerId}
-          view={view}
-          horizon={data.horizon}
-          sort={rawSort}
-          carry={carry}
-        />
-
         {swapFor !== null && view !== 'clubs' && (
           <ReplacementSection
             outgoing={
@@ -482,14 +504,6 @@ async function MatrixSection({
                   !STATES_OWN_RANGE.has(view) &&
                   ` Gameweek ${data.startGameweek} onwards.`}
               </p>
-              {/* The rows are clickable and nothing on screen said so, which
-                  made the whole scratch-squad feature invisible until found by
-                  accident. Not on Teams: its rows are clubs, not players. */}
-              {TRANSFER_HINT[view] && (
-                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                  {TRANSFER_HINT[view]}
-                </p>
-              )}
             </div>
             {/* Only the two horizon-driven views get these. Showing them on the
               Form view would offer settings that change nothing there. Both
@@ -524,6 +538,18 @@ async function MatrixSection({
               </div>
             )}
           </div>
+
+          {/* Directly above the table it describes, not under the subtitle.
+              It is an aside about how to use the rows, so it belongs next to
+              them rather than in the block that says what the view is for —
+              where, at subtitle size, it also read as a second subtitle and
+              pushed the table down the page. Smaller and quieter than the
+              subtitle for the same reason. */}
+          {TRANSFER_HINT[view] && (
+            <p className="text-xs text-neutral-400 dark:text-neutral-500">
+              {TRANSFER_HINT[view]}
+            </p>
+          )}
 
           {view === 'clubs' ? (
             <ClubBlocksTable
@@ -621,6 +647,9 @@ async function MatrixSection({
               view={viewData}
               swapHref={swapHref}
               overLimitTeamIds={scratch.warnings.overLimitTeamIds}
+              managerId={managerId}
+              sort={parseFixturesSort(rawSort ?? undefined)}
+              carry={carry}
             />
           )}
 
@@ -1136,13 +1165,22 @@ function EmptyState() {
 
         <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-300">
           To look up someone else, find them in a league table, click View, and
-          read their number the same way.
+          read their Manager ID the same way.
         </p>
       </section>
 
-      <p className="text-sm text-neutral-500 dark:text-neutral-400">
-        Best on a laptop or tablet. The tables run wide, and a phone means a lot
-        of sideways scrolling.
+      {/* A tinted, ruled callout rather than a grey footnote. It is the one
+          expectation-setting line on the page, and read after it a phone user
+          knows why the tables scroll; read past, the app looks broken on the
+          device most people open a link on. */}
+      <p className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-200">
+        <span aria-hidden className="text-base leading-none">
+          &#9432;
+        </span>
+        <span>
+          <strong className="font-semibold">Best on a laptop or tablet.</strong>{' '}
+          The tables run wide, and a phone means a lot of sideways scrolling.
+        </span>
       </p>
     </div>
   )

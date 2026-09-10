@@ -100,6 +100,18 @@ export function SquadHeader({
             <span className="truncate text-sm text-neutral-500 dark:text-neutral-400">
               {manager.managerName}
             </span>
+            {/* The ID is the one thing a reader has to hand to anyone else to
+                reproduce what they are looking at, and it is otherwise only
+                visible in the address bar. Shown beside the name it names, so
+                a borrowed squad's ID is never mistaken for your own. */}
+            <span
+              title="This squad's FPL manager ID"
+              className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-xs tabular-nums text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+            >
+              <span className="sr-only">Manager ID </span>
+              <span aria-hidden>ID </span>
+              {manager.id}
+            </span>
             {viewingAs && (
               <Link
                 href={backHref}

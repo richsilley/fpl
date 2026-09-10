@@ -17,6 +17,22 @@ import { cachedJson, parseId } from '@/lib/fpl/http'
  *
  * Cached for 1 hour: updates during and after matches (section 8.3).
  */
+
+/**
+ * Set explicitly rather than left to the platform default.
+ *
+ * This route itself makes one upstream call and is quick, but the default is
+ * a property of the deployment target rather than of this code: it is ten
+ * seconds on Vercel today and is not ours to depend on. The page that consumes
+ * these standings fans out to fifty `picks/` calls and already declares sixty
+ * for that reason (`app/page.tsx`); stating it here too means neither can be
+ * silently retimed by a platform change.
+ *
+ * Sixty seconds is the hobby-tier ceiling. It is a cap, not a target — nothing
+ * here should come close, and if it ever does the fix is the fan-out, not a
+ * longer timeout.
+ */
+export const maxDuration = 60
 export async function GET(
   request: NextRequest,
   context: RouteContext<'/api/league/[leagueId]'>

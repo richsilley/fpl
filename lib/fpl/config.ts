@@ -61,6 +61,31 @@ export const CACHE_SECONDS = {
 export const MIN_PICKS_CACHE_SECONDS = 60
 
 /**
+ * Ceiling for a settled gameweek's picks, and the reason there is one at all.
+ *
+ * The picks themselves are immutable the moment the deadline passes, and the
+ * points and rank in `entry_history` stop moving once bonus is applied. After
+ * that the response never changes again, so in principle it could be cached
+ * forever.
+ *
+ * It cannot, because **FPL reuses gameweek numbers every season**.
+ * `/entry/123/event/3/picks/` means one squad this season and a different one
+ * next, at the same URL. An unbounded entry would serve last season's squad
+ * after the rollover. So a settled gameweek is cached to the end of the
+ * season and no further; this is the fallback for when the remaining time
+ * cannot be worked out.
+ */
+export const SETTLED_PICKS_CACHE_SECONDS = 60 * 60 * 24 * 30
+
+/**
+ * Slack added after the final deadline before a settled entry expires.
+ *
+ * The last gameweek still has to be played and have its bonus applied after
+ * its deadline, and nothing else marks "the season is over" in the payload.
+ */
+export const SEASON_END_BUFFER_SECONDS = 60 * 60 * 24 * 14
+
+/**
  * Used for picks once the season has ended and there is no next deadline.
  * Not a ceiling on the in-season value: gaps between deadlines run to a week
  * or more, and picks really are immutable across them.

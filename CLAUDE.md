@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.25; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.27; v1 feature complete).
 
 ## What this is
 
@@ -41,7 +41,7 @@ wrappers over it. Cache durations live in `lib/fpl/config.ts`.
 |---|---|
 | `GET /api/bootstrap` | 1h |
 | `GET /api/fixtures` | 1h |
-| `GET /api/picks/{managerId}?gw=` | until next deadline; `gw` defaults to current |
+| `GET /api/picks/{managerId}?gw=` | settled gameweek → rest of season; otherwise until next deadline |
 | `GET /api/league/{leagueId}?page=` | 1h; page 1 = top 50 |
 
 `getEntry()` (`entry/{id}/`) also exists in `lib/fpl/api.ts` with no route handler —
@@ -54,6 +54,27 @@ Codes: `bad_request` 400, `not_found` 404, `picks_not_yet_available` 409,
 §8.6. **Never cache a failure** — an outage at a deadline must not be served
 for the next hour. Only 200s are stored, so this is automatic for `fetch` but
 must be preserved by hand anywhere else.
+
+**Picks have two lifetimes, and `data_checked` picks between them.** The picks
+themselves are immutable at the deadline, but the same payload carries
+`entry_history` — the gameweek's points and rank — which keeps moving while
+matches run and again when bonus lands. So a gameweek FPL has marked
+`finished && data_checked` is held to the end of the season; anything else is
+held to the next deadline, as before (`picksCacheSeconds`). In a 38-gameweek
+season all but the newest gameweek is settled.
+
+**It is bounded to the season, not cached forever, because FPL reuses gameweek
+numbers.** `/entry/123/event/3/picks/` means a different squad next season at
+the same URL, so an unbounded entry would serve last season's data after the
+rollover.
+
+**Identical in-flight requests are coalesced** (`inFlight` in `client.ts`). The
+Data Cache only helps once a response exists; until then a burst of readers on
+one cold league each start their own fan-out. Coalescing collapses that to one
+call per distinct URL. **Per instance only** — cross-instance dedup needs shared
+state, which costs money. It is not a cache: entries are dropped the moment the
+request settles either way, so §8.3's never-cache-a-failure rule is unaffected
+and the next caller retries.
 
 Caching uses the **`fetch` Data Cache**, not `use cache`/`cacheComponents`.
 `use cache` is in-memory per instance and does not survive Vercel's serverless
@@ -188,9 +209,15 @@ rendering a scratch squad**.
 and view-as live in the **Options dialog**, not on the page. The four views are
 segmented buttons at full width — the loudest thing below the header.
 
-- **Header is sticky at every width** and carries the Options button. The
-  scratch strip rides in the *same* sticky container (`page.tsx`), so they
-  cannot overlap — neither positions itself.
+- **Header, scratch strip and view tabs are one sticky stack** (`page.tsx`),
+  so they cannot overlap — none of the three positions itself. The tabs are in
+  it because switching view is the primary act, and on a long table scrolling
+  used to strand the reader with no way across without returning to the top.
+  All three pad back to the same gutter.
+- **The header carries the manager ID** beside the team and manager names. It
+  is what a reader hands to someone else to reproduce what they are looking at,
+  and it is otherwise only in the address bar. Beside the name it names, so a
+  borrowed squad's ID is never mistaken for your own.
 - On a phone the six stat tiles collapse to one line of text; sticky tiles
   would eat a third of the screen.
 - **Viewing as → the whole header turns amber and holds "Back to my team".**
@@ -311,6 +338,15 @@ Shared cell/badge rendering and both colour scales live in
 `StrengthBadge` copies were identical until one of them needed the display
 floor below, which is exactly how the two views start disagreeing.
 
+**Team Strength has its own colour bands** (`strengthTone`), not Fixture
+Score's. They share a 0-to-10 axis and nothing else. Fixture Score *clusters*
+around 6.0 (an all-average run scores exactly that), so bands at ±0.5/±1.5 pick
+out real outliers. Team Strength is *uniform by construction* — a linear
+rescale across the twenty clubs — with a midpoint of 5.0. Read through Fixture
+Score's bands, 18 of 20 clubs came out green or red, which says only "above or
+below average". Bands are now 7.5 / 6 / 4 / 2.5, giving 5/3/4/3/5 across the
+league. **Colour only** — nothing that sorts or ranks sees this.
+
 **Team Strength is floored at 0.5 for display only** (`MIN_DISPLAYED_STRENGTH`).
 The scale is linear across the twenty clubs, so the bottom club lands on exactly
 0.0 by construction, and "0.0" reads as a figure that failed to load rather than
@@ -376,6 +412,10 @@ Applies to every string a reader sees — headings, labels, tooltips, legends.
   whole scratch squad. The example names a *different* view on purpose:
   "ranked by the view you're in" is abstract until contrasted with what the
   same list looks like elsewhere. Teams gets none — its rows are clubs.
+  **It sits directly above the table, at `text-xs` and one step lighter than
+  the subtitle.** It is an aside about how to use the rows, so it belongs next
+  to them; under the subtitle and at subtitle size it read as a second subtitle
+  and pushed the table down the page.
 
 ## The four views
 
@@ -385,8 +425,20 @@ Rows are the 15 players except where noted.
    gameweeks **in the horizon** (1 selected → 1 column); headers read "GW3".
    A trailing spacer column soaks up leftover width so short horizons don't
    stretch cells across the page. Each cell = opponent + H/A, shaded by
-   raw FDR. Frozen name column. Blanks = empty cells, doubles = split cells.
+   raw FDR. Blanks = empty cells, doubles = split cells.
    Summary column shows Fixture Score over the §7.6 horizon.
+
+   **Only the name column is frozen.** Fixture Score was pinned beside it,
+   which cost about half a phone's width before a single gameweek was visible —
+   the summary of the run covering the run. It scrolls like everything else.
+
+   **Sortable by Fixture Score and Team Strength**, with the Player header as
+   the way back to squad order, exactly as Form does it (`FixturesSort` in
+   `params.ts`). Sorted per group so XI and bench stay split; ties fall back to
+   squad order, which matters here because eleven players from six clubs
+   produce a lot of them. The field names match `CLUB_SORTS` on purpose, so
+   leaving Fixtures sorted by strength and switching to Teams lands sorted by
+   strength.
 2. **Form** — spot who's delivering and who's on the decline. **Built,
    redesigned §7.3.1.** Columns in order: price, GW change, season change, pts,
    PPG, **mins**, form, xGI, DefCon, **xP**. (No xG/xA, no Status/News columns —
@@ -474,8 +526,13 @@ Rows are the 15 players except where noted.
    leagues.
 
    **League mode is the app's only fan-out.** Top 50 by league rank, 8 `picks/`
-   calls in flight (`PICKS_CONCURRENCY`) — a single call is >1s, so 50 in series
-   would be 90s. ~6s cold, ~1.4s cached. Wrapped in `<Suspense>` and the page
+   calls in flight (`PICKS_CONCURRENCY`) — in series that would be minutes.
+   **Measured on production, 8 cold 50-manager leagues: 569ms median, 814ms
+   worst; warm 259ms median.** Eight simultaneous readers on eight different
+   cold leagues finish in 933ms wall clock. **Do not raise the concurrency to
+   chase a faster cold load** — 8 per instance is a deliberate ceiling on what
+   this app can aim at an undocumented API with no appeals process if it blocks
+   us, and the number is nowhere near being the bottleneck. Wrapped in `<Suspense>` and the page
    sets `maxDuration = 60`; without both, a cold load blanks the page and can
    exceed the platform default. Failed squads shrink the denominator and are
    reported, they don't break the view. You count in your own league's numbers.
