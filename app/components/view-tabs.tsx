@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+import { TabPending } from '@/app/components/tab-pending'
+
 import {
   BUILT_VIEWS,
   buildHref,
@@ -25,6 +27,14 @@ import type { Horizon } from '@/lib/fpl/horizon'
  * menu, and these have been given the weight the hierarchy always implied —
  * segmented buttons, larger text, the selected one filled rather than
  * underlined.
+ *
+ * ## They report being pressed
+ *
+ * Switching view is a server round trip, and until it returns the tabs cannot
+ * know which of them is selected — that comes back with the response. Each
+ * carries a `TabPending` child that reacts to the press itself, so the delay
+ * reads as waiting rather than as a control that ignored you. This stays a
+ * Server Component; only the indicator inside each link is client code.
  */
 export function ViewTabs({
   managerId,
@@ -60,13 +70,16 @@ export function ViewTabs({
             })}
             aria-current={selected ? 'page' : undefined}
             scroll={false}
-            className={`flex-1 whitespace-nowrap rounded-md px-3 py-2 text-center text-sm font-semibold transition-colors sm:text-base ${
+            className={`relative flex-1 whitespace-nowrap rounded-md px-3 py-2 text-center text-sm font-semibold transition-colors sm:text-base ${
               selected
                 ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-50'
                 : 'text-neutral-600 hover:bg-white/60 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-50'
             }`}
           >
-            {VIEW_LABELS[id]}
+            {/* Behind the label, and out of the layout, so a pressed tab does
+                not shift by a pixel. */}
+            <TabPending />
+            <span className="relative">{VIEW_LABELS[id]}</span>
           </Link>
         )
       })}

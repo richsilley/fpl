@@ -25,3 +25,34 @@ body {
   /* Was Arial, which overrode the Geist font loaded in layout.tsx. */
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+/*
+ * The sweep on a pressed view tab (app/components/tab-pending.tsx).
+ *
+ * A keyframe rather than a Tailwind utility because it is one bespoke motion
+ * used in one place, and expressing it inline would need an arbitrary value
+ * per property.
+ *
+ * Honours reduced motion: the bar stops travelling and simply sits under the
+ * tab, so the "something is happening" signal survives without the movement.
+ */
+@keyframes tab-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.tab-sweep {
+  animation: tab-sweep 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-sweep {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}

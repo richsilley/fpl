@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.27
+**Version:** 1.28
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -870,6 +870,18 @@ Unlike the scratch squad, these are **not** carried between views: an overlay is
 #### One gutter for the whole page
 
 The sticky bars bleed to the window edge but pad themselves back to the same gutter as the content below, and both are capped at the same width and centred. The menu button, the view tabs and every table therefore start on exactly the same vertical line, and the margins are equal on both sides. Before this the bars were centred within a maximum width while the page content ran the full window, so the two disagreed by however wide the window was.
+
+#### 7.8.0 Switching view has to feel immediate
+
+Each view is the same route with different search parameters, so choosing one is a server round trip. Measured against production: about 200ms warm, 350ms on a 4G connection, and up to 740ms for Ownership in league mode. For all of that time **nothing on screen changed**, because the tab's selected state arrives with the response. A control that does not react for a third of a second does not read as slow; it reads as not having registered the press, and the reasonable response to that is to press it again.
+
+**The pressed tab shows a pending state within one or two frames** — measured at 17 to 32ms — using `useLinkStatus`. A subtle tint over the tab and an indeterminate sweep along its lower edge. The wait is a network round trip with no progress to report, so the indicator says only that something is happening.
+
+**It does not paint the pressed tab as selected.** The currently selected tab stays selected until the new view actually arrives. Two tabs looking equally chosen would be a worse lie than a moment of delay.
+
+**Route-level `loading.tsx` is the wrong tool here**, though the framework documentation prefers it in general. The header, the scratch-squad strip and the tabs themselves are all rendered by the page, so a route-level fallback would blank the tab that was just pressed and flash the entire shell on every switch. Moving the shell into a layout is not available either: it is built from search parameters, which layouts do not receive. A dynamic route with no loading file is precisely the case the hook exists for.
+
+**The indicator is decorative and hidden from assistive technology**, and carries no layout of its own, so a pressed tab does not shift. Without JavaScript the tabs remain plain links and behave exactly as before.
 
 #### 7.8.1 Legends
 

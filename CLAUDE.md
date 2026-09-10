@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.27; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.28; v1 feature complete).
 
 ## What this is
 
@@ -241,6 +241,19 @@ segmented buttons at full width — the loudest thing below the header.
 - **The manager dropdown is present but disabled** until a league is chosen. It
   used to be absent, which left no sign that a second step followed, so picking
   a league looked like it did nothing.
+- **The view tabs report being pressed** (`TabPending`, `useLinkStatus`). Every
+  view is the same route with different search params, so switching is a server
+  round trip and the tabs cannot know which is selected until it returns:
+  measured 200ms warm, 350ms on 4G, 740ms for Ownership in league mode, with
+  **nothing changing on screen** for the whole of it. A press with no reaction
+  reads as ignored, not slow, and people press again. Feedback now lands in
+  under 30ms. **Not `loading.tsx`**, which the Next docs otherwise prefer: the
+  header, scratch strip and tabs all live in `page.tsx`, so a route-level
+  fallback would blank the tab you just pressed and flash the whole shell —
+  and moving the shell to a layout is not possible, since it is built from
+  `searchParams`, which layouts do not receive. That leaves a dynamic route
+  with no loading file, which is the case `useLinkStatus` documents itself for.
+  It is `aria-hidden` and decorative, so the no-JS path is unaffected.
 - **One gutter for the whole page.** The sticky bars bleed to the window edge
   but pad back to the same gutter, and bars and content share `max-w-[1600px]`
   centred. Menu button, tabs and every table start on the same line. Change the
