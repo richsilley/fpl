@@ -1,11 +1,13 @@
 import Link from 'next/link'
 
+import { ChipStrip } from '@/app/components/chip-strip'
 import { overLimitAccent, PlayerName } from '@/app/components/player-cell'
 import {
   MATRIX_HEADER_HEIGHT,
   MATRIX_PLAYER_COLUMN,
   MATRIX_ROW_HEIGHT,
 } from '@/app/components/table-metrics'
+import type { ChipStatus } from '@/lib/fpl/chips'
 import {
   bandStrategyStep,
   ownershipBandOf,
@@ -94,6 +96,7 @@ export function OwnershipTable({
   swapHref,
   overLimitTeamIds,
   populationHref,
+  chips,
 }: {
   rows: OwnershipView[]
   reference: ReferencePopulation
@@ -105,6 +108,13 @@ export function OwnershipTable({
   overLimitTeamIds: Set<number>
   /** Opens the population picker (section 7.8). */
   populationHref: string
+  /**
+   * The rival's remaining chips, in rival scope only. Null in every other
+   * mode, and null when the history call failed — the strip is worth having
+   * but not worth an error page, so a failure costs the strip and nothing
+   * else.
+   */
+  chips: ChipStatus[] | null
 }) {
   const startingXi = rows.filter((row) => row.player.squadPosition <= 11)
   const bench = rows.filter((row) => row.player.squadPosition > 11)
@@ -127,6 +137,15 @@ export function OwnershipTable({
           phone. */}
       <PopulationButton href={populationHref} label={reference.label} />
       <DirectionFlag reference={reference} />
+
+      {/* Directly under the direction guidance, because it answers the
+          question that guidance raises. Being told to chase a rival with
+          differentials is worth little without knowing whether they still hold
+          a wildcard to answer with. Rival scope only — a league has fifty
+          managers and no single set of chips to report. */}
+      {chips && rivalLabel && (
+        <ChipStrip chips={chips} rivalName={rivalLabel} />
+      )}
 
       {/* Every league and rival figure on this table is a snapshot taken at
           the last deadline, because that is when `picks/` becomes readable

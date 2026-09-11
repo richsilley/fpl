@@ -255,6 +255,16 @@ segmented buttons at full width — the loudest thing below the header.
   `searchParams`, which layouts do not receive. That leaves a dynamic route
   with no loading file, which is the case `useLinkStatus` documents itself for.
   It is `aria-hidden` and decorative, so the no-JS path is unaffected.
+- **The mini league invite appears exactly twice** — foot of the home page,
+  foot of the Options dialog (`app/components/league-invite.tsx`, `compact` for
+  the dialog). Those are the two moments a reader is not mid-task; anywhere
+  else it interrupts what they came to do. **`LEAGUE_CODE` and
+  `LEAGUE_JOIN_URL` are constants, never retyped per copy**: two places quoting
+  a join code that has drifted is worse than offering none, because FPL shows a
+  generic error and never says which half was wrong. The URL is shown in full
+  rather than behind link text — it goes off-site and acts on the reader's
+  account, so they see where it points first, and it is the form they can paste
+  to someone else.
 - **One gutter for the whole page.** The sticky bars bleed to the window edge
   but pad back to the same gutter, and bars and content share `max-w-[1600px]`
   centred. Menu button, tabs and every table start on the same line. Change the
@@ -505,7 +515,10 @@ incoming player in any package.
 **Controls, in order: scope, horizon, transfers.** Each narrows the question
 the next one answers, and all three stay visible — the horizon was briefly
 behind a disclosure, which hid the control that most changes what the
-suggestions are. Difficulty is fixed to Form and risk is gone. Difficulty × risk × horizon was
+suggestions are. **All three are styled identically**, down to label weight and
+button padding; transfers was a bordered box in larger, heavier type and read
+as a panel that had drifted into the strip rather than as the third setting in
+it. They are one strip and must keep looking like one. Difficulty is fixed to Form and risk is gone. Difficulty × risk × horizon was
 fifty-odd combinations that barely moved the output. Risk was removed rather
 than demoted: the package axis already runs safest to highest ceiling, so a
 risk control would have been a second dial on the same thing.
@@ -669,6 +682,17 @@ Rows are the 15 players except where noted.
    shuffling four rows the reader has just learned. **That closing paragraph is
    a claim about where the reader actually sits, so it has an `ahead` and a
    `behind` wording** — keep both true if either is edited.
+
+   **In rival scope the rival's remaining chips sit directly under the
+   direction guidance** (`app/components/chip-strip.tsx`, shared with The
+   Edge). It answers the question that guidance raises: being told to chase a
+   rival with differentials is worth little without knowing whether they still
+   hold a wildcard to answer with. Rival scope only — a league has fifty
+   managers and no one set of chips to report — and never the reader's own.
+   A failed `entry/{id}/history/` call costs the strip and nothing else.
+   **Shared, not copied**: two views disagreeing about what a spent chip looks
+   like is exactly the drift the allowance table exists to prevent, and FPL has
+   changed chip rules mid-season before.
 
    Direction still lives in one guidance line above the table, never per player
    (§7.4). Denominator is `total_players`; median split; null rank → unknown.

@@ -16,12 +16,19 @@ export function parseTransfers(value: string | undefined): number {
 }
 
 /**
- * How many transfers the reader has (section 7.9). The primary control.
+ * How many transfers the reader has (section 7.9).
  *
  * It is the one input that changes the shape of the answer rather than its
  * ordering: one transfer is a different plan from three, not the same plan
- * ranked differently. Everything else — horizon, scope — adjusts a ranking,
- * which is why they sit behind the Advanced disclosure and this does not.
+ * ranked differently.
+ *
+ * **Styled exactly as the horizon control**, down to the label weight and the
+ * button padding. It used to be a bordered box in a larger, heavier type, on
+ * the argument that the shape-changing control should look like the loudest
+ * one. In place, it read as a separate panel that had drifted into the control
+ * strip rather than as the third of three settings, and it drew the eye away
+ * from the suggestions underneath. The three controls are one strip; keep them
+ * looking like it.
  *
  * FPL does not publish a manager's free transfer count anywhere (see
  * `chips.ts`), so this is asked rather than derived. A number inferred from
@@ -54,17 +61,17 @@ export function TransfersSelector({
     })
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-neutral-300 px-4 py-3 dark:border-neutral-700">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <span
         id="transfers-label"
-        className="text-base font-semibold text-neutral-900 dark:text-neutral-50"
+        className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
       >
         You have
       </span>
       <span
         role="group"
         aria-labelledby="transfers-label"
-        className="inline-flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700"
+        className="inline-flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-700"
       >
         {Array.from({ length: MAX_TRANSFERS }, (_, index) => index + 1).map(
           (value) => (
@@ -73,10 +80,10 @@ export function TransfersSelector({
               href={href(value)}
               aria-current={value === transfers ? 'true' : undefined}
               scroll={false}
-              className={`px-3.5 py-1.5 text-base font-semibold tabular-nums transition-colors ${
+              className={`rounded px-2.5 py-1 text-sm font-medium tabular-nums transition-colors ${
                 value === transfers
                   ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-                  : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                  : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
               }`}
             >
               {value}
@@ -87,7 +94,7 @@ export function TransfersSelector({
       {/* "transfer(s)", not a pluralised word. The label sits beside a number
           the reader is about to change, and a word that rewrites itself on
           every click draws the eye away from the number that moved. */}
-      <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+      <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
         transfer(s)
       </span>
     </div>

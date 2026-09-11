@@ -9,6 +9,7 @@ import { Suspense } from 'react'
 
 import Link from 'next/link'
 
+import { LeagueInvite } from '@/app/components/league-invite'
 import { ManagerIdForm } from '@/app/components/manager-id-form'
 import { OwnershipModeSelector } from '@/app/components/ownership-mode-selector'
 import {
@@ -510,6 +511,11 @@ async function MatrixSection({
                 />
               </Suspense>
             </MenuSection>
+
+            {/* Bottom of the dialog, below both settings sections and with no
+                heading of its own: it is an aside, not a third thing to
+                configure. */}
+            <LeagueInvite compact />
           </AppMenu>
         )}
 
@@ -1145,6 +1151,19 @@ async function OwnershipSection({
     return <ErrorNotice kind={fplError.kind} message={fplError.message} />
   }
 
+  // The rival's remaining chips, exactly as The Edge shows them, and on the
+  // same terms: rival scope only, never the reader's own, and a failure costs
+  // the strip rather than the view.
+  let chips = null
+  if (rival !== null && rivalId !== null) {
+    try {
+      const history = await getEntryHistory(rivalId)
+      chips = remainingChips(history.chips)
+    } catch {
+      chips = null
+    }
+  }
+
   // `compareOwnership` is still the one function section 7.4 asks for: called
   // once per population, and never asking which one it has.
   const active = compareOwnership(players, reference)
@@ -1167,6 +1186,7 @@ async function OwnershipSection({
       swapHref={swapHref}
       overLimitTeamIds={overLimitTeamIds}
       populationHref={populationHref}
+      chips={chips}
     />
   )
 }
@@ -1328,6 +1348,11 @@ function EmptyState() {
           The tables run wide, and a phone means a lot of sideways scrolling.
         </span>
       </p>
+
+      {/* Last on the page, under the expectation-setting callout: an invitation
+          is the one thing here that is not needed to use the app, so it comes
+          after everything that is. */}
+      <LeagueInvite />
     </div>
   )
 }
