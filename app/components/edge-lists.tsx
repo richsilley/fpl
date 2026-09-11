@@ -2,57 +2,51 @@ import Link from 'next/link'
 
 import { scoreTone } from '@/app/components/fixture-visuals'
 import type { ChipStatus } from '@/lib/fpl/chips'
-import type { EdgeRow } from '@/lib/fpl/edge'
+import { GATE_LABELS, SELL_REASON_LABELS } from '@/lib/fpl/edge-gates'
+import type { EdgePackage, EdgeResult, Move } from '@/lib/fpl/edge-packages'
 import { formatPrice } from '@/lib/format'
 
 /**
- * The Edge (section 7.9): ranked buy and sell suggestions.
+ * The Edge (section 7.9): complete transfer packages.
  *
- * ## Every row shows its working
+ * ## Packages, not rankings
  *
- * This is the one view in the app that gives answers rather than evidence.
- * Every other view lays out numbers and leaves the judgement to the reader;
- * this one has already judged. That earns it an obligation the others do not
- * have: **a row has to show what put it there.**
+ * The first build showed two ranked lists, buy and sell, generated
+ * independently. That produced suggestions the reader could not fund and a
+ * manufactured sell case for whoever happened to come fifteenth. This shows
+ * two to four complete plans, each a set of paired moves that has been checked
+ * against the money end to end.
  *
- * So each carries the projection, the fixture score, the form and the
- * ownership behind its rank. A player suggested because of a fixture swing
- * looks visibly different from one suggested because of form, and a reader who
- * disagrees can see exactly which input they disagree with. Without that, a
- * bad suggestion does not just cost one transfer — it undermines the four
- * views that were right.
+ * ## It shows its working, and it shows what it rejected
+ *
+ * Every move names the tests it passed. Below the packages, the candidates
+ * that were considered and cut, each with the specific reason. That second
+ * list is where trust is built: a bare ranking throws away the reasoning, and
+ * a recommendation nobody can argue with is a recommendation nobody can check.
  */
 export function EdgeLists({
-  buy,
-  sell,
-  directionLine,
+  result,
   chips,
   rivalName,
   swapHref,
   horizonGameweeks,
+  transfersControl,
 }: {
-  buy: EdgeRow[]
-  sell: EdgeRow[]
-  /** The derived direction, in words. Section 7.9. */
-  directionLine: string
-  /** Only in rival scope. Null everywhere else. */
+  result: EdgeResult
   chips: ChipStatus[] | null
   rivalName: string | null
-  /** Opens the replacement panel for a squad player. Null disables it. */
   swapHref: ((playerId: number) => string) | null
   horizonGameweeks: number
+  /** The primary control, rendered above everything it changes. */
+  transfersControl: React.ReactNode
 }) {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-        <p className="text-sm text-neutral-700 dark:text-neutral-300">
-          {directionLine}
-        </p>
-      </div>
+  const { packages, sells, rejections, convergent, bank } = result
 
-      {/* Section 7.9 requires this, persistently and above the lists. Every
-          rival and league figure on this page is a deadline-old snapshot, and
-          a recommendation built on one is only as good as that assumption. */}
+  return (
+    <div className="space-y-5">
+      {transfersControl}
+
+      {/* Section 7.9 requires this, persistently and above the packages. */}
       <p
         role="note"
         className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
@@ -63,25 +57,311 @@ export function EdgeLists({
 
       {chips && rivalName && <ChipStrip chips={chips} rivalName={rivalName} />}
 
-      <EdgeTable
-        title="Consider buying"
-        subtitle={`Ranked best first, over the next ${horizonGameweeks} gameweek${horizonGameweeks === 1 ? '' : 's'}.`}
-        rows={buy}
-        horizonGameweeks={horizonGameweeks}
-        swapHref={null}
-        empty="No player clears the quality threshold for this horizon and scope. That is a real answer, not a missing one: in a settled week with no fixture swing there may be nothing worth a transfer. Try a longer horizon, or come back after the next round of fixtures."
-      />
+      <SellGate sells={sells} swapHref={swapHref} />
 
-      <EdgeTable
-        title="Consider selling"
-        subtitle="Your fifteen, worst first. Click a name to see replacements."
-        rows={sell}
-        horizonGameweeks={horizonGameweeks}
-        swapHref={swapHref}
-        empty="No squad loaded."
-      />
+      {packages.length > 0 && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+              {packages.length === 1 ? 'One plan' : `${packages.length} plans`}
+            </h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Ranked best first, over the next {horizonGameweeks} gameweek
+              {horizonGameweeks === 1 ? '' : 's'}. You have {formatPrice(bank)}{' '}
+              in the bank.
+            </p>
+          </div>
+
+          {/* Section 7.9: when every route ends on the same fifteen, say so.
+              It changes the question from which squad to which order. */}
+          {convergent && (
+            <p className="max-w-prose rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+              These end on the same fifteen. You are not choosing a destination,
+              you are choosing a route.
+            </p>
+          )}
+
+          {packages.map((pack, index) => (
+            <PackageCard
+              key={pack.id}
+              pack={pack}
+              rank={index + 1}
+              best={index === 0}
+            />
+          ))}
+        </section>
+      )}
+
+      {rejections.length > 0 && (
+        <section className="space-y-2">
+          <div>
+            <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+              Considered and cut
+            </h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              What the tests rejected, and why.
+            </p>
+          </div>
+          <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+            {rejections.map((rejection) => (
+              <li
+                key={rejection.name}
+                className="flex flex-wrap items-baseline gap-x-2 px-4 py-2 text-sm"
+              >
+                <span className="font-medium text-neutral-900 dark:text-neutral-100">
+                  {rejection.name}
+                </span>
+                <span className="tabular-nums text-neutral-500 dark:text-neutral-400">
+                  {formatPrice(rejection.price)}
+                </span>
+                <span className="text-neutral-500 dark:text-neutral-400">
+                  {rejection.reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Section 7.9. The app gets to a shortlist; it does not get to a call. */}
+      <p className="max-w-prose text-sm text-neutral-500 dark:text-neutral-400">
+        These are shortlists, not final calls. Team news, press conferences and
+        returning players change them, and none of that is in the data.
+      </p>
     </div>
   )
+}
+
+/**
+ * The sell gate's verdict.
+ *
+ * Section 7.9: a week with nobody to sell is a valid and common answer, and
+ * saying so plainly is the point. Ranking all fifteen worst-first would
+ * manufacture a case against whoever came last.
+ */
+function SellGate({
+  sells,
+  swapHref,
+}: {
+  sells: EdgeResult['sells']
+  swapHref: ((playerId: number) => string) | null
+}) {
+  if (sells.length === 0) {
+    return (
+      <p className="max-w-prose rounded-lg border border-neutral-200 px-4 py-3 text-sm text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
+        <span className="font-medium text-neutral-900 dark:text-neutral-100">
+          Nobody in your squad has a case against them this week.
+        </span>{' '}
+        No player trips two of the four sell tests, so there is no transfer to
+        make. That is a normal answer, not a missing one.
+      </p>
+    )
+  }
+
+  return (
+    <section className="space-y-2">
+      <div>
+        <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+          {sells.length === 1
+            ? 'One player has no case to stay'
+            : `${sells.length} players have no case to stay`}
+        </h3>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Everyone else does. Each of these trips at least two sell tests.
+        </p>
+      </div>
+      <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+        {sells.map(({ player, reasons }) => (
+          <li
+            key={player.id}
+            className="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-4 py-2 text-sm"
+          >
+            {swapHref ? (
+              <Link
+                href={swapHref(player.id)}
+                scroll={false}
+                className="font-medium text-neutral-900 underline decoration-dotted underline-offset-4 dark:text-neutral-100"
+              >
+                {player.name}
+              </Link>
+            ) : (
+              <span className="font-medium text-neutral-900 dark:text-neutral-100">
+                {player.name}
+              </span>
+            )}
+            <span className="text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
+              {player.clubShort} {player.position}
+            </span>
+            <span className="tabular-nums text-neutral-500 dark:text-neutral-400">
+              {formatPrice(player.price)}
+            </span>
+            <span className="flex flex-wrap gap-1">
+              {reasons.map((reason) => (
+                <span
+                  key={reason}
+                  className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
+                >
+                  {SELL_REASON_LABELS[reason]}
+                </span>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function PackageCard({
+  pack,
+  rank,
+  best,
+}: {
+  pack: EdgePackage
+  rank: number
+  best: boolean
+}) {
+  return (
+    <article
+      className={`rounded-lg border px-4 py-3 ${
+        best
+          ? 'border-neutral-400 bg-neutral-50 dark:border-neutral-600 dark:bg-neutral-900'
+          : 'border-neutral-200 dark:border-neutral-800'
+      }`}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+          {rank}. {pack.title}
+        </h4>
+        <p className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+          {formatPrice(pack.moneyLeft)} left
+          {pack.banked > 0 &&
+            ` · ${pack.banked} transfer${pack.banked === 1 ? '' : 's'} banked`}
+        </p>
+      </div>
+
+      <ul className="mt-2 space-y-1.5">
+        {pack.moves.map((move) => (
+          <MoveRow key={move.out.id} move={move} />
+        ))}
+      </ul>
+
+      <dl className="mt-3 space-y-1 text-xs">
+        <div className="flex gap-2">
+          <dt className="shrink-0 font-medium text-emerald-700 dark:text-emerald-400">
+            Gains
+          </dt>
+          <dd className="text-neutral-600 dark:text-neutral-400">
+            {pack.gains}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="shrink-0 font-medium text-rose-700 dark:text-rose-400">
+            Costs
+          </dt>
+          <dd className="text-neutral-600 dark:text-neutral-400">
+            {pack.costs}
+          </dd>
+        </div>
+      </dl>
+    </article>
+  )
+}
+
+function MoveRow({ move }: { move: Move }) {
+  return (
+    <li className="rounded-md bg-white px-3 py-2 text-sm dark:bg-neutral-950/40">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="text-neutral-500 line-through dark:text-neutral-500">
+          {move.out.name}
+        </span>
+        <span className="tabular-nums text-neutral-400 dark:text-neutral-600">
+          {formatPrice(move.out.price)}
+        </span>
+        <span aria-hidden className="text-neutral-400">
+          &rarr;
+        </span>
+        <span className="font-medium text-neutral-900 dark:text-neutral-100">
+          {move.in.name}
+        </span>
+        <span className="text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
+          {move.in.clubShort}
+        </span>
+        <span className="tabular-nums text-neutral-600 dark:text-neutral-300">
+          {formatPrice(move.in.price)}
+        </span>
+
+        {/* The tests this pair passed. Two of three is the bar, so naming them
+            is what separates a move that raised the floor from one that moved
+            money — which are different recommendations. */}
+        <span className="flex flex-wrap gap-1">
+          {move.gates.passed.map((gate) => (
+            <span
+              key={gate}
+              title={GATE_LABELS[gate]}
+              className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200"
+            >
+              {GATE_LABELS[gate]}
+            </span>
+          ))}
+        </span>
+      </div>
+
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+        <span>
+          Projected{' '}
+          <span className="font-medium tabular-nums text-neutral-700 dark:text-neutral-200">
+            {move.in.projected.toFixed(1)}
+          </span>{' '}
+          against {move.out.projected.toFixed(1)}
+        </span>
+        <span className="inline-flex items-baseline gap-1">
+          Fixtures
+          <span
+            className={`rounded px-1 tabular-nums ${scoreTone(move.in.fixtureScore)}`}
+          >
+            {move.in.fixtureScore.toFixed(1)}
+          </span>
+        </span>
+        <span>
+          Form <span className="tabular-nums">{move.in.form.toFixed(1)}</span>
+        </span>
+        <span>
+          Owned{' '}
+          <span className="tabular-nums">{move.in.ownership.toFixed(1)}%</span>
+        </span>
+        {/* The market's own opinion, which nothing else in the app shows. */}
+        <span title="Net transfers across all FPL managers this gameweek">
+          Market{' '}
+          <span
+            className={`tabular-nums ${
+              move.in.netTransfers > 0
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-rose-700 dark:text-rose-400'
+            }`}
+          >
+            {formatNet(move.in.netTransfers)}
+          </span>
+        </span>
+      </div>
+
+      {move.alternativeNote && (
+        <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+          Alternative: {move.alternativeNote}
+        </p>
+      )}
+    </li>
+  )
+}
+
+/** Net transfers, rounded to thousands. The magnitude is the signal. */
+function formatNet(net: number): string {
+  const sign = net > 0 ? '+' : '−'
+  const magnitude = Math.abs(net)
+  if (magnitude >= 1000) {
+    return `${sign}${Math.round(magnitude / 1000)}k`
+  }
+  return `${sign}${magnitude}`
 }
 
 /**
@@ -125,216 +405,4 @@ function ChipStrip({
       </dl>
     </div>
   )
-}
-
-function EdgeTable({
-  title,
-  subtitle,
-  rows,
-  horizonGameweeks,
-  swapHref,
-  empty,
-}: {
-  title: string
-  subtitle: string
-  rows: EdgeRow[]
-  horizonGameweeks: number
-  swapHref: ((playerId: number) => string) | null
-  empty: string
-}) {
-  return (
-    <section className="space-y-2">
-      <div>
-        <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
-          {title}
-        </h3>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          {subtitle}
-        </p>
-      </div>
-
-      {rows.length === 0 ? (
-        // Section 7.9: say so, rather than showing nothing. An empty list with
-        // no explanation reads as a broken page.
-        <p className="max-w-prose rounded-lg border border-neutral-200 px-4 py-3 text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-          {empty}
-        </p>
-      ) : (
-        <div className="relative overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full border-separate border-spacing-0 text-sm">
-            <thead>
-              <tr className="h-[45px]">
-                <Th className="sticky left-0 z-20 w-52 min-w-52 border-r text-left">
-                  Player
-                </Th>
-                <Th className="w-16 min-w-16" title="Current price">
-                  Price
-                </Th>
-                <Th
-                  className="w-24 min-w-24"
-                  title={`Expected points over the next ${horizonGameweeks} gameweek${horizonGameweeks === 1 ? '' : 's'}, from the projection model`}
-                >
-                  Projected
-                </Th>
-                <Th
-                  className="w-24 min-w-24"
-                  title="How far your risk setting and your position moved this player from its raw projection"
-                >
-                  Strategy
-                </Th>
-                <Th
-                  className="w-24 min-w-24"
-                  title="Fixture Score over the horizon. Higher is better, 6.0 is average"
-                >
-                  Fixtures
-                </Th>
-                <Th
-                  className="w-16 min-w-16"
-                  title="Average points over the last 30 days"
-                >
-                  Form
-                </Th>
-                <Th
-                  className="w-20 min-w-20"
-                  title="Ownership within the selected scope"
-                >
-                  Owned
-                </Th>
-                <th
-                  aria-hidden
-                  className="w-auto border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800"
-                />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <Row
-                  key={row.playerId}
-                  row={row}
-                  href={swapHref === null ? null : swapHref(row.playerId)}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  )
-}
-
-function Th({
-  className,
-  title,
-  children,
-}: {
-  className: string
-  title?: string
-  children: React.ReactNode
-}) {
-  return (
-    <th
-      scope="col"
-      title={title}
-      className={`border-b border-neutral-200 bg-neutral-50 px-2 py-2 text-right font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 ${className}`}
-    >
-      {children}
-    </th>
-  )
-}
-
-function Row({ row, href }: { row: EdgeRow; href: string | null }) {
-  const background = 'bg-white dark:bg-neutral-900'
-
-  return (
-    <tr className="h-[45px]">
-      <th
-        scope="row"
-        className={`sticky left-0 z-10 w-52 min-w-52 border-b border-r border-neutral-200 px-3 py-1.5 text-left font-normal dark:border-neutral-800 ${background}`}
-      >
-        <span className="flex items-baseline gap-1.5">
-          {href ? (
-            <Link
-              href={href}
-              scroll={false}
-              className="truncate font-medium text-neutral-900 underline decoration-dotted underline-offset-4 hover:decoration-solid dark:text-neutral-100"
-            >
-              {row.name}
-            </Link>
-          ) : (
-            <span className="truncate font-medium text-neutral-900 dark:text-neutral-100">
-              {row.name}
-            </span>
-          )}
-          <span className="shrink-0 text-[10px] uppercase text-neutral-400 dark:text-neutral-500">
-            {row.clubShort} {row.position}
-          </span>
-        </span>
-      </th>
-
-      <Td>{formatPrice(row.price)}</Td>
-
-      {/* The headline number, and the one the backtest scores. */}
-      <Td strong>{row.projection.points.toFixed(1)}</Td>
-
-      {/* Signed on purpose: a reader has to be able to see when a player is
-          here because of the strategy rather than the projection. */}
-      <Td
-        className={
-          row.strategy.adjustment > 0.05
-            ? 'text-emerald-700 dark:text-emerald-400'
-            : row.strategy.adjustment < -0.05
-              ? 'text-rose-700 dark:text-rose-400'
-              : 'text-neutral-400 dark:text-neutral-500'
-        }
-      >
-        {formatSigned(row.strategy.adjustment)}
-      </Td>
-
-      <Td>
-        <span
-          className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 tabular-nums ${scoreTone(row.fixtureScore)}`}
-        >
-          <span className="font-semibold">{row.fixtureScore.toFixed(1)}</span>
-          <span className="text-[11px] opacity-70">({row.fixtureCount})</span>
-        </span>
-      </Td>
-
-      <Td>{row.form.toFixed(1)}</Td>
-      <Td>{row.ownership.toFixed(1)}%</Td>
-
-      <td
-        aria-hidden
-        className={`w-auto border-b border-neutral-100 dark:border-neutral-800/70 ${background}`}
-      />
-    </tr>
-  )
-}
-
-function Td({
-  children,
-  strong = false,
-  className = '',
-}: {
-  children: React.ReactNode
-  strong?: boolean
-  className?: string
-}) {
-  return (
-    <td
-      className={`border-b border-l border-neutral-100 px-2 py-1.5 text-right tabular-nums dark:border-neutral-800/70 ${
-        strong
-          ? 'font-semibold text-neutral-900 dark:text-neutral-50'
-          : 'text-neutral-700 dark:text-neutral-300'
-      } ${className}`}
-    >
-      {children}
-    </td>
-  )
-}
-
-function formatSigned(value: number): string {
-  if (Math.abs(value) < 0.05) {
-    return '—'
-  }
-  return `${value > 0 ? '+' : '−'}${Math.abs(value).toFixed(1)}`
 }

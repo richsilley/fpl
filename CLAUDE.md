@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.29; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.30; v1 feature complete).
 
 ## What this is
 
@@ -95,7 +95,7 @@ instances and deploys. Result: 1.65MB → 298KB response, 341KB cache entry, 6x
 under the limit.
 
 `events`, `teams` and `element_types` pass through whole (~35KB). `elements` is
-cut from ~100 fields to these 23 (`lib/fpl/projection.ts`):
+cut from ~100 fields to these 25 (`lib/fpl/projection.ts`):
 
 ```
 id, web_name, first_name, second_name, team, element_type,
@@ -104,7 +104,8 @@ form, total_points, points_per_game, minutes,
 expected_goals, expected_assists, expected_goal_involvements,
 defensive_contribution, defensive_contribution_per_90,
 ep_next,
-selected_by_percent, status, news, chance_of_playing_next_round
+selected_by_percent, transfers_in_event, transfers_out_event,
+status, news, chance_of_playing_next_round
 ```
 
 `defensive_contribution_per_90` arrives as a number (not a string like the xG
@@ -430,42 +431,73 @@ Applies to every string a reader sees — headings, labels, tooltips, legends.
   to them; under the subtitle and at subtitle size it read as a second subtitle
   and pushed the table down the page.
 
-## The Edge (§7.9) — two layers, and they must stay apart
+## The Edge (§7.9) — a gate, not a score
 
-**Layer 1 (`edge-projection.ts`) says how many points.** Same answer for every
-reader and every strategy. Every constant is named at the top of the file.
+**Rebuilt.** The first version ranked 600 players on one continuous number and
+put Khalaili — 0.2% owned, form 2.0 — top of the buy list. An arithmetic that
+never asks whether anyone would actually pick a player will always find someone
+nobody wants.
 
-**Layer 2 (`edge-strategy.ts`) says what those points are worth here.** One
-tuning constant, `RISK_WEIGHT`, scaled by the risk selector.
+**A move qualifies by passing two of three binary tests** (`edge-gates.ts`),
+never a weighted sum. No weights means nothing to tune and nothing arbitrary to
+defend.
 
-**Do not merge them.** Merged, you need a weight per combination of scope,
-objective and risk, and none of those can be validated against anything
-observable. Split, you get one falsifiable model plus one preference. Layer 1
-is checked by `scripts/backtest-projection.mjs`, which replays a past gameweek
-from `element-summary` history alone and scores it against actual points.
+| Test | Passes when |
+|---|---|
+| Raises the floor | Projected points beat the sell by a margin scaled to the horizon |
+| Money moves the right way | Selling a faller, buying a riser or a hold |
+| Would be picked anyway | Top quartile of its position over `LONG_HORIZON` (6) |
 
-**The direction sign is the opposite of the one §7.9 first wrote down**, and
-deliberately. That section said "-1 when ahead", but its own next paragraph
-says leading means you want what your rivals own. Taken literally it ranked a
-30%-owned player *below* a 0.2%-owned one for a manager in the top 1%. The
-prose wins, and it matches §7.4’s existing rule (ahead → Template best).
-Ahead: +1. Behind: -1. Unknown: 0, which drops the term rather than guessing.
+**Hard disqualifiers run first**, because each is a fact about the move rather
+than an argument for it: under 60 minutes a match, under 1% owned *and* out of
+form, unavailable, fourth from a club, unaffordable against the specific sell.
+Khalaili is cut by the second of those.
 
-**No Objective control.** Direction is derived from the standing the app
-already computes. Risk plus scope covers every case with one fewer control.
+**`transfers_in_event` and `transfers_out_event` are the market signal.** They
+were in the payload and unused. `isFalling`/`isRising` read price change *or*
+net transfers — the first is what happened, the second is what is about to. A
+player being sold by a quarter of a million has not fallen yet and will.
 
-**Rows show their working** — projection, fixture score, form, ownership, and
-the strategy adjustment signed and separate. This is the only view that gives
-answers rather than evidence, so a bad suggestion has to be traceable to the
-input the reader disagrees with.
+**The sell list is a gate too.** Ranking all fifteen worst-first manufactures a
+case against whoever came last. A player is flagged only on two of four: hard
+fixtures, form below the **position median** among regular starters, falling
+price, fitness doubt. A week with no sells is a valid answer and the view says
+so. The median is per position and recomputed each request — a fixed threshold
+flagged the first-choice goalkeeper for being a goalkeeper.
 
-**No free transfer count for a rival, ever.** FPL does not expose one, and the
-only way to infer it breaks around wildcard and free hit weeks. Chips remaining
-are derived from `entry/{id}/history/`, which lists chips *played*.
+**Buys are always paired to sells** (`edge-packages.ts`). Budget binds them:
+funds run across the whole package, so every plan is affordable end to end
+rather than move by move.
 
-**Global ownership is keyed over every player, not the squad.**
-`globalPopulation` took a map of the fifteen, which answered 0 for every buy
-candidate and silently flattened Layer 2 to nothing. It reads bootstrap now.
+**Output is two to four packages, varied on one axis at a time** — spend all
+versus bank one, safest versus highest ceiling. Safest takes the best
+projection over the selected horizon, breaking ties towards *more* owned;
+ceiling takes the best long-horizon projection, breaking ties towards *less*
+owned. Identical packages are deduplicated, so two is common and honest. Close
+candidates become alternatives inside a package, not packages of their own.
+
+**A fixture against a club you own demotes, it does not veto**
+(`CONFLICT_PENALTY`). Rejecting outright cut De Cuyper, who the GW4 log went on
+to pick — in a 0-0 both he and the owned defender bank a clean sheet, so they
+only pull apart on the attacking side.
+
+**Rejections are shown, conflicts first and capped at two.** A player who
+failed a test failed arithmetic anyone could repeat; one who passed every test
+and was still cut for a fixture clash is reasoning no other view could produce.
+Five of the rarer kind teaches nothing about the gate, so the list mixes both.
+
+**Controls: transfers is primary, horizon and scope sit behind Advanced,
+difficulty is fixed to Form, risk is gone.** Difficulty × risk × horizon was
+fifty-odd combinations that barely moved the output. Risk was removed rather
+than demoted: the package axis already runs safest to highest ceiling, so a
+risk control would have been a second dial on the same thing.
+
+**Transfers is asked, not derived.** FPL publishes no free transfer count, and
+inferring one from transfer history breaks around wildcard and free hit weeks.
+Same reason a rival's free transfers are never shown.
+
+**Layer 1 (`edge-projection.ts`) is unchanged** and still feeds Tests 1 and 3.
+It remains separately falsifiable via `scripts/backtest-projection.mjs`.
 
 ## The four views
 

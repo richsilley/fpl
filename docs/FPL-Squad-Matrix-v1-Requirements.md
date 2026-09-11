@@ -1,6 +1,6 @@
 # FPL Squad Matrix — v1 Requirements
 
-**Version:** 1.29
+**Version:** 1.30
 **Date:** 5 September 2026
 **Status:** Built. All seven build order steps are complete; v1 is feature complete
 
@@ -901,88 +901,83 @@ Scratch squad editing (7.7) is the largest feature in the app and its entry poin
 
 ### 7.9 View 5 — The Edge
 
-**Title "The Edge", subtitle "Find your best moves. Players to consider buying and selling, ranked for your position and your risk appetite."**
+**Title "The Edge", subtitle "Find your best moves. Complete transfer packages, paired and costed against the money you actually have."**
 
-Ranked buy and sell suggestions. No optimiser in this pass.
+Ranked transfer packages. No optimiser in this pass.
 
-#### Two separate layers
+#### The score was replaced by a gate
 
-**This separation is the core design decision. They must not be merged.**
+The first build ranked every player in the game on one continuous value and presented the top of that list as the buy recommendations. It put Khalaili — 0.2% owned, form 2.0 — first, because a defender with a good DefCon rate and an easy run scores well on an arithmetic that never asks whether anyone would actually pick him.
 
-**Layer 1 estimates how many points a player scores.** Identical for every user and every strategy. A single model with a testable output.
+**A move qualifies by passing at least two of three binary tests.** Not a weighted sum: there are no weights, so there is nothing to tune and nothing arbitrary to defend.
 
-**Layer 2 decides how much those points are worth given the user's position.** This is where strategy enters, and it needs exactly one tuning constant.
+1. **Raises the floor.** Projected points over the horizon beat the player being replaced by a meaningful margin, same position. The margin scales with the horizon, so a longer view needs a proportionally bigger gap rather than the same absolute one
+2. **Money moves the right way.** Selling a falling asset, buying a rising or stable one, from `cost_change_event` together with `transfers_in_event` and `transfers_out_event`
+3. **Would be picked anyway.** Ranks in the top quarter of its position over a six-gameweek horizon, not just the selected one. A player who only looks good over three gameweeks is a punt, not a transfer
 
-Merging them would require a weight per combination of scope, objective and risk, none of which could ever be validated, because none names an observable quantity. Keeping them apart means one falsifiable model plus one preference setting.
+**Hard disqualifiers are applied before the tests**, because each is a fact about the move rather than an argument for it: below a minimum minutes rate, below 1% owned *and* below-average form, unavailable, would breach the three-per-club limit, or unaffordable against the specific sell it is paired with. Low ownership plus low form is not an undiscovered asset; it is the market knowing something.
 
-#### Layer 1: point projection
+#### Transfer momentum
 
-Per player, per fixture in the horizon:
+`transfers_in_event` and `transfers_out_event` were already in the payload and unused. They are the only signal here not derived from something that has already happened on a pitch: hundreds of thousands of managers moving the same way carries team news, press conferences and price pressure that nothing else in the payload does.
 
-```
-projected = P(start) x (appearance + attacking + defensive)
-```
+**"Falling" means the price has already moved *or* the market is moving against them.** The first is what happened, the second is what is about to. A player being sold by a quarter of a million has not fallen yet and will, and a rule that waited for the tick missed exactly the players worth acting on.
 
-- **P(start)** from recent minutes and availability status. A player flagged out scores 0
-- **appearance** 2 if likely to play 60+, else 1
-- **attacking** xGI per 90 x fixtureMultiplier x points per goal involvement for that position
-- **defensive** clean sheet probability x position clean sheet points, plus P(clearing DefCon threshold) x 2
+Surfaced as a column on every move, and used in Test 2.
 
-**fixtureMultiplier** scales attacking output by the fixture, derived from the club's Fixture Score for that gameweek under the currently selected difficulty mode (6.7).
+#### The sell list is a gate, not a ranking
 
-Summed across the horizon one fixture at a time, so a double gameweek earns twice and a blank earns nothing — the same shape 6.5 relies on, with no special cases.
+Ranking all fifteen worst-first manufactures a sell case for players who have none, because somebody is always fifteenth. A player is flagged only when they trip at least two of: a hard fixture run over the horizon, form below par for the minutes played, a falling price with the market selling, or a fitness doubt.
 
-**Every constant is named at the top of the file.** They are tunable, and unlike a composite score they are testable against actual points.
+**Form is measured against the median for that position** among players getting regular minutes, not against a fixed number. Among regulars the medians run roughly GKP 3.0, DEF 3.0, MID 3.7, FWD 3.3 — a keeper on 3.0 is an ordinary keeper and a midfielder on 3.0 is a problem. A single threshold flagged the squad's first-choice goalkeeper for being a goalkeeper.
 
-#### Layer 2: strategy adjustment
+**If nobody trips two, the view says so plainly.** A week with no sells is valid and common.
 
-```
-value = projected + RISK x direction x (ownership - populationMean)
-```
+#### Buys are paired to sells
 
-Strategy does not change how many points a player scores. It changes how much you care about variance relative to the people you are competing with. Leading, you minimise the chance of losing ground, so you want what your rivals own. Chasing, you need differentials. Same projections, opposite ranking.
+Budget binds them together, so they are never generated independently. Funds are carried across the whole package — bank, plus each sale, minus each purchase, in order — so a plan is affordable end to end rather than move by move.
 
-**The sign of `direction` is the reverse of the one first specified.** The original said "-1 when ahead of the reference population, +1 when behind" — which, taken literally, does the opposite of the paragraph above it. Built that way it ranked a 30%-owned player below a 0.2%-owned one for a manager in the top 1%, advising someone defending a lead to take on variance against a field they were already beating. **Ahead is +1, behind is -1**, matching both the reasoning and 7.4’s existing rule that ahead makes Template the best band. Two views giving opposite advice from the same standing would be a contradiction the reader can see.
+#### Internal conflict check
 
-Unknown standing gives 0, dropping the term rather than guessing a direction.
+A buy that plays a fixture against a club already in the squad, inside the gameweek the transfer is for, is flagged. Nothing else in the app surfaces this; it is only computable by crossing the squad against the fixture list.
+
+**It demotes rather than disqualifies.** Rejecting outright cut De Cuyper, whom the GW4 log went on to pick, having decided the clash was softer than it first sounded: in a 0-0 both he and the owned defender bank a clean sheet, so the two only pull against each other on the attacking side. A clash costs a candidate a fraction of a projected point per club involved, which reorders near-ties without overturning a real gap. When it changes the answer it becomes the package's stated cost; when a clashing candidate is passed over it becomes a rejection.
+
+#### Output is packages, not rankings
+
+**One prominent input:** how many transfers the reader has, one to five. It is asked rather than derived, because FPL publishes no free transfer count and inferring one breaks around wildcard and free hit weeks — and being wrong about the budget would invalidate every package below it.
+
+**Two to four complete packages, ranked.** Each shows every out and in as a pair, the money left and transfers banked, one line on what it gains and one on what it costs.
+
+Packages are generated by varying **a single axis at a time**, so the differences are explicable rather than arbitrary: use all transfers versus bank one, and safest versus highest ceiling. Safest takes the best projection over the selected horizon and breaks ties towards the more owned player; highest ceiling takes the best long-horizon projection and breaks ties towards the less owned. Identical packages are deduplicated, so two is a common and honest count.
+
+**Where two candidates are close they are alternatives inside one package**, not packages of their own.
+
+**If the packages converge on the same squad, say so.** The reader is then choosing a route, not a destination.
+
+#### Show the rejections
+
+Below the packages, three to five candidates considered and cut, each with the specific reason: name, price, and the test they failed.
+
+**Fixture clashes lead, capped at two.** A player who failed a test failed arithmetic anyone could repeat; one who passed every test and was still cut for a clash is the single piece of reasoning the reader could not have reached from the other four views. Five of the rarer kind would teach nothing about the gate, so the list mixes both.
 
 #### Controls
 
-- **Scope** — Overall, a league, or a named rival. Reuses the existing "Compare against" modal
-- **Risk** — Conservative, Balanced, Aggressive
-- **Horizon** — the same control as 7.6
+**Transfers is the primary control** and sits above everything it changes. It is the only input that changes the shape of the answer rather than its ordering.
 
-**No separate Objective control.** Direction is derived from whether the user is ahead of or behind the selected scope, which the app already computes for 7.4's direction flag. Aggressive-when-ahead extends a lead; conservative-when-ahead defends it. Risk plus scope covers every case in fewer controls, and a control whose value can be derived is one that can be set to disagree with reality.
+**Horizon and scope sit behind an Advanced disclosure**, defaulting to five gameweeks and Overall. **Difficulty is fixed to Form** — the gate reads fixtures through the projection, and offering three ratings for a number the reader never sees was a control over nothing.
 
-The derived direction is stated as a line of text above the lists, in the same style as the Ownership callout.
+**Risk was removed, not demoted.** The requirement allowed either, on condition that it visibly change the output. It could not be made to: the package axis already runs from safest to highest ceiling, so a risk control would have been a second dial on the same thing. Difficulty times risk times horizon was over fifty combinations that barely moved the answer.
 
-#### The lists
+#### Honest limits
 
-**BUY**: every player not in the squad, ranked by value, best first. **SELL**: the fifteen, ranked by value, worst first.
+Beneath the packages: *These are shortlists, not final calls. Team news, press conferences and returning players change them, and none of that is in the data.*
 
-No fixed length. Only players clearing a quality threshold appear, so the buy list may be empty in a settled week and long after a fixture swing. **When it is empty it says so**, rather than showing nothing.
+The app gets to the shortlist and is clear that is where it stops.
 
-**Each row shows the components behind the ranking, not just the rank**: projected points, fixture score, form, ownership, and the strategy adjustment signed and separate from the projection. A player appearing because of fixtures must be visibly different from one appearing because of form. Every other view shows evidence and lets the reader decide; this one gives answers, so it has to show its working or it undermines the views that are right.
+#### Layer 1 is unchanged
 
-Clicking a sell suggestion opens the existing transfer panel (7.7).
-
-#### Rival chips
-
-In rival scope, the chips they have left. `entry/{id}/history/` returns a `chips` array of what has been **played**; remaining is derived from it.
-
-**Never their free transfer count.** It is not exposed, and can only be inferred by tracking transfers accrued against transfers made, which breaks around wildcard and free hit weeks. A number that is wrong exactly when it matters most is worse than no number.
-
-#### Required notice
-
-Persistent, above the lists: *Rival and league squads are from the last deadline. This assumes nobody else makes a transfer before the next one.*
-
-#### Backtest
-
-`scripts/backtest-projection.mjs`. Separate from the app, no storage. Replays the projection as it would have stood at a past gameweek using only `element-summary` history available then, and scores it against actual points. Reports correlation, rank correlation and mean absolute error against a season-points-per-game baseline.
-
-Availability cannot be reconstructed — `status` describes today and is in no history payload — so the replay treats everyone as fit. That biases the error upwards: the live model, which zeroes a flagged player, is better than the numbers say.
-
-Without this the projection is unfalsifiable, which is the entire reason Layer 1 is kept separate.
+The point projection (`edge-projection.ts`) still feeds Tests 1 and 3, with every constant named at the top of the file, and remains separately falsifiable through `scripts/backtest-projection.mjs`. Replacing the *ranking* with a gate did not replace the *estimate*; it stopped the estimate being the only thing that mattered.
 
 ### 7.10 Writing the copy
 

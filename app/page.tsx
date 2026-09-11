@@ -20,7 +20,11 @@ import { Overlay } from '@/app/components/overlay'
 import { RatingToggle } from '@/app/components/rating-toggle'
 import { ReplacementPanel } from '@/app/components/replacement-panel'
 import { EdgeLists } from '@/app/components/edge-lists'
-import { RiskSelector } from '@/app/components/risk-selector'
+import {
+  AdvancedControls,
+  parseTransfers,
+  TransfersSelector,
+} from '@/app/components/transfers-selector'
 import { ScratchStrip } from '@/app/components/scratch-strip'
 import { SquadHeader } from '@/app/components/squad-header'
 import { ViewAsSelector } from '@/app/components/view-as-selector'
@@ -84,12 +88,8 @@ import {
   type SquadPlayer,
 } from '@/lib/fpl/squad'
 import { remainingChips } from '@/lib/fpl/chips'
-import { buildEdgeLists } from '@/lib/fpl/edge'
-import {
-  describeDirection,
-  parseRisk,
-  type RiskLevel,
-} from '@/lib/fpl/edge-strategy'
+import { LONG_HORIZON } from '@/lib/fpl/edge-gates'
+import { buildEdge } from '@/lib/fpl/edge-packages'
 import { getEntryHistory } from '@/lib/fpl/api'
 import { loadMatrixData, type MatrixData } from '@/lib/fpl/views'
 import { getBootstrap } from '@/lib/fpl/api'
@@ -116,7 +116,7 @@ const VIEW_QUESTIONS: Record<ViewId, string> = {
     "See what your rivals own and build a strategy that fits your objective, whether that's chasing rank or defending a lead.",
   clubs:
     "Find your next target. Every club ranked by the fixtures ahead and how they're playing.",
-  edge: 'Find your best moves. Players to consider buying and selling, ranked for your position and your risk appetite.',
+  edge: 'Find your best moves. Complete transfer packages, paired and costed against the money you actually have.',
 }
 
 /**
@@ -195,7 +195,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const swapFor = parseEntityId(first(params.swap))
   const dismissedStale = first(params.stale) === 'ok'
   const panel = parsePanel(first(params.panel))
-  const risk = parseRisk(first(params.risk))
+  const transfers = parseTransfers(first(params.transfers))
   // An unparseable league or rival ID falls back to global rather than
   // erroring, per section 8.2.
   const ownershipMode = ownershipModeOf(
@@ -237,7 +237,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             asId={asId}
             asLeagueId={asLeagueId}
             rating={rating}
-            risk={risk}
+            transfers={transfers}
             scratchPairs={scratchPairs}
             swapFor={swapFor}
             dismissedStale={dismissedStale}
@@ -263,7 +263,7 @@ async function MatrixSection({
   asId,
   asLeagueId,
   rating,
-  risk,
+  transfers,
   scratchPairs,
   swapFor,
   dismissedStale,
@@ -284,7 +284,7 @@ async function MatrixSection({
   asLeagueId: number | null
   /** Which fixture difficulty rating to score with (section 6.7). */
   rating: RatingSource
-  risk: RiskLevel
+  transfers: number
   /** Modelled transfers, oldest first (section 7.7). */
   scratchPairs: ScratchPair[]
   /** Squad player whose replacement panel is open, if any. */
@@ -312,7 +312,15 @@ async function MatrixSection({
 
   let data: MatrixData
   try {
-    data = await loadMatrixData(viewedId ?? myId, horizon, rating)
+    // The Edge is fixed to the form rating (section 7.9). Its output is a
+    // set of transfer packages, and offering three difficulty modes for a
+    // number the reader never sees was a control over nothing — fifty-odd
+    // combinations that barely moved the answer.
+    data = await loadMatrixData(
+      viewedId ?? myId,
+      horizon,
+      view === 'edge' ? 'form' : rating
+    )
   } catch (error) {
     const fplError =
       error instanceof FplApiError
@@ -542,7 +550,7 @@ async function MatrixSection({
               The applied horizon, not the requested one, so a clamped value
               shows what is actually on screen. Keyed on it so a navigation
               remounts the control and its input picks up the new value. */}
-            {usesHorizon(view) && (
+            {usesHorizon(view) && view !== 'edge' && (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
                 <RatingToggle
                   managerId={managerId}
@@ -552,16 +560,6 @@ async function MatrixSection({
                   sort={rawSort}
                   carry={carry}
                 />
-                {view === 'edge' && (
-                  <RiskSelector
-                    managerId={managerId}
-                    risk={risk}
-                    view={view}
-                    horizon={data.horizon}
-                    sort={rawSort}
-                    carry={carry}
-                  />
-                )}
                 <HorizonSelector
                   key={`${view}-${data.horizon}`}
                   managerId={managerId}
@@ -721,7 +719,7 @@ async function MatrixSection({
               {/* League scope fans out to fifty squads, so the lists stream in
                   behind the controls rather than holding the page. */}
               <Suspense
-                key={`edge-${ownershipMode}-${leagueId ?? rivalId ?? 'global'}-${risk}-${data.horizon}`}
+                key={`edge-${ownershipMode}-${leagueId ?? rivalId ?? 'global'}-${transfers}-${data.horizon}`}
                 fallback={<OwnershipLoading mode={ownershipMode} />}
               >
                 <EdgeSection
@@ -732,9 +730,35 @@ async function MatrixSection({
                   mode={ownershipMode}
                   leagueId={leagueId}
                   rivalId={rivalId}
-                  risk={risk}
+                  transfers={transfers}
                   swapHref={swapHref}
                   populationHref={populationHref}
+                  transfersControl={
+                    <div className="space-y-3">
+                      <TransfersSelector
+                        managerId={managerId}
+                        transfers={transfers}
+                        view={view}
+                        horizon={data.horizon}
+                        sort={rawSort}
+                        carry={carry}
+                      />
+                      {/* Horizon and scope change the ordering; transfers
+                          changes the shape of the answer. Only the one that
+                          reshapes it earns a place above the packages. */}
+                      <AdvancedControls>
+                        <HorizonSelector
+                          key={`edge-${data.horizon}`}
+                          managerId={managerId}
+                          horizon={data.horizon}
+                          maxHorizon={data.maxHorizon}
+                          view={view}
+                          sort={rawSort}
+                          carry={carry}
+                        />
+                      </AdvancedControls>
+                    </div>
+                  }
                 />
               </Suspense>
             </>
@@ -751,7 +775,12 @@ async function MatrixSection({
 
           {/* The legend explains fixture shading and the Fixture Score, neither
             of which the Form view shows. */}
-          {usesHorizon(view) && <FixturesLegend showOwned={view === 'clubs'} />}
+          {/* The Edge uses the horizon but draws no matrix, so the legend
+            explaining fixture cells and colour bands has nothing to point at
+            there. It keeps its own explanations inside the packages. */}
+          {usesHorizon(view) && view !== 'edge' && (
+            <FixturesLegend showOwned={view === 'clubs'} />
+          )}
           {view === 'form' && <FormLegend />}
         </section>
       </div>
@@ -1295,6 +1324,17 @@ function EmptyState() {
  * `buildEdgeLists` runs the projection, then the strategy, and this component
  * only renders what comes back.
  */
+/**
+ * The Edge (section 7.9), behind its own Suspense boundary.
+ *
+ * It reuses the Ownership view's reference population rather than growing a
+ * second way to define scope. In league scope that is the fifty-squad fan-out,
+ * which is why this streams.
+ *
+ * The work is done by `buildEdge`: the gate model decides what qualifies, the
+ * package builder pairs buys to sells and checks the money end to end, and
+ * nothing here adjusts either.
+ */
 async function EdgeSection({
   squad,
   data,
@@ -1303,9 +1343,10 @@ async function EdgeSection({
   mode,
   leagueId,
   rivalId,
-  risk,
+  transfers,
   swapHref,
   populationHref,
+  transfersControl,
 }: {
   squad: Squad
   data: MatrixData
@@ -1314,9 +1355,10 @@ async function EdgeSection({
   mode: ReferenceMode
   leagueId: number | null
   rivalId: number | null
-  risk: RiskLevel
+  transfers: number
   swapHref: (playerId: number) => string
   populationHref: string
+  transfersControl: React.ReactNode
 }) {
   const players = [...squad.startingXi, ...squad.bench]
 
@@ -1338,7 +1380,7 @@ async function EdgeSection({
   }
 
   // Only in rival scope, and only ever a rival's own chips. A failure here
-  // costs the strip and nothing else: the lists do not depend on it.
+  // costs the strip and nothing else: the packages do not depend on it.
   let chips = null
   if (mode === 'rival' && rivalId !== null) {
     try {
@@ -1349,15 +1391,18 @@ async function EdgeSection({
     }
   }
 
-  const lists = buildEdgeLists({
+  const result = buildEdge({
     bootstrap,
     fixtures: data.fixtures,
     squad: players,
     startGameweek: data.startGameweek,
     horizon: data.horizon,
+    longHorizon: LONG_HORIZON,
     matchesPlayed: data.matchesPlayed,
-    reference,
-    risk,
+    ownershipOf: reference.ownershipOf,
+    // Last-deadline figure, like everywhere else the budget is used (7.7).
+    bank: squad.manager.bank,
+    transfers,
   })
 
   const gameweeks = horizonGameweeks(data.startGameweek, data.horizon).length
@@ -1366,29 +1411,13 @@ async function EdgeSection({
     <div className="space-y-4">
       <PopulationButton href={populationHref} label={reference.label} />
       <EdgeLists
-        buy={lists.buy}
-        sell={lists.sell}
-        directionLine={describeDirection(
-          reference.standing.position,
-          risk,
-          scopeSubject(reference)
-        )}
+        result={result}
         chips={chips}
         rivalName={mode === 'rival' ? reference.label : null}
         swapHref={swapHref}
         horizonGameweeks={gameweeks}
+        transfersControl={transfersControl}
       />
     </div>
   )
-}
-
-/** How the direction line names the population it is talking about. */
-function scopeSubject(reference: ReferencePopulation): string {
-  if (reference.mode === 'global') {
-    return 'the field'
-  }
-  if (reference.mode === 'rival') {
-    return reference.label
-  }
-  return reference.label
 }

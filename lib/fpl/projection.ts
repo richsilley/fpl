@@ -73,6 +73,10 @@ function projectElement(element: FplElement): FplElement {
     // Ownership, section 7.4
     selected_by_percent: element.selected_by_percent,
 
+    // Market momentum, section 7.9's second gate.
+    transfers_in_event: element.transfers_in_event,
+    transfers_out_event: element.transfers_out_event,
+
     // Availability, section 7.3
     status: element.status,
     news: element.news,

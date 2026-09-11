@@ -9,7 +9,6 @@
  */
 
 import { DEFAULT_HORIZON, type Horizon } from './horizon'
-import { DEFAULT_RISK, type RiskLevel } from './edge-strategy'
 
 /** The views in section 8.2's parameter table. */
 export const VIEWS = ['fixtures', 'form', 'ownership', 'clubs', 'edge'] as const
@@ -324,7 +323,12 @@ export type AppState = {
    * the rating: it is a standing preference, not a per-view setting, so
    * leaving The Edge and coming back keeps it.
    */
-  risk?: RiskLevel | null
+  /**
+   * How many transfers the reader has (section 7.9). The Edge's primary
+   * control, and asked rather than derived: FPL publishes no free transfer
+   * count, and inferring one breaks around wildcard and free hit weeks.
+   */
+  transfers?: number | null
 }
 
 /**
@@ -342,7 +346,7 @@ export type AppState = {
  */
 export type CarriedState = Pick<
   AppState,
-  'league' | 'rival' | 'as' | 'asLeague' | 'rating' | 'out' | 'in' | 'risk'
+  'league' | 'rival' | 'as' | 'asLeague' | 'rating' | 'out' | 'in' | 'transfers'
 >
 
 /** Drops the view-as target, and the league list that fed it. */
@@ -370,7 +374,7 @@ export function buildHref({
   in: incoming,
   swap,
   panel,
-  risk,
+  transfers,
 }: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
@@ -414,8 +418,8 @@ export function buildHref({
   if (panel) {
     params.set('panel', panel)
   }
-  if (risk && risk !== DEFAULT_RISK) {
-    params.set('risk', risk)
+  if (transfers && transfers !== 1) {
+    params.set('transfers', String(transfers))
   }
   return `/?${params.toString()}`
 }

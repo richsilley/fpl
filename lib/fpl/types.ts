@@ -105,6 +105,18 @@ export type FplElement = {
   /** Global ownership, for the Ownership view (section 7.4). */
   selected_by_percent: string
 
+  /**
+   * Net transfers this gameweek, across every FPL manager (section 7.9).
+   *
+   * The market's own opinion, and the only signal here that is not derived
+   * from what has already happened on a pitch. Hundreds of thousands of
+   * managers moving the same way is information about team news, press
+   * conferences and price pressure that no other field in this payload
+   * carries.
+   */
+  transfers_in_event: number
+  transfers_out_event: number
+
   /** Availability (section 7.3). `a` available, `d` doubtful, `i`/`o`/`s`/`u`. */
   status: string
   /** Injury news text (section 7.3). */
