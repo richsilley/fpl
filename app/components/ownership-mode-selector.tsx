@@ -5,6 +5,7 @@ import {
   buildHref,
   carriedFields,
   type AppState,
+  type ViewId,
   type CarriedState,
   type ClubSort,
 } from '@/lib/fpl/params'
@@ -37,6 +38,7 @@ export function OwnershipModeSelector({
   leagueId,
   rivalId,
   horizon,
+  view,
   sort,
   members,
   carry,
@@ -48,6 +50,8 @@ export function OwnershipModeSelector({
   leagueId: number | null
   rivalId: number | null
   horizon: Horizon
+  /** The view this was opened from, so choosing a population stays on it. */
+  view: ViewId
   sort: ClubSort
   /** The selected league's managers, or null when no league is selected. */
   members: LeagueMember[] | null
@@ -67,7 +71,10 @@ export function OwnershipModeSelector({
   const staysOpen: AppState['panel'] = 'population'
   const base: AppState = {
     id: managerId,
-    view: 'ownership',
+    // The view the reader is on, not a hard-coded one. The Edge opens this
+    // same picker, and pinning it to 'ownership' sent them to a different view
+    // as the side effect of choosing a scope.
+    view,
     horizon,
     sort,
     as: carry.as,

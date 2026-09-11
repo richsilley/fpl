@@ -329,6 +329,11 @@ export type AppState = {
    * count, and inferring one breaks around wildcard and free hit weeks.
    */
   transfers?: number | null
+  /**
+   * Player whose detail panel is open (section 7.9). Like `swap`, this is a
+   * momentary act rather than a setting, so it is not carried between views.
+   */
+  player?: string | null
 }
 
 /**
@@ -375,6 +380,7 @@ export function buildHref({
   swap,
   panel,
   transfers,
+  player,
 }: AppState): string {
   const params = new URLSearchParams()
   params.set('id', id)
@@ -420,6 +426,9 @@ export function buildHref({
   }
   if (transfers && transfers !== 1) {
     params.set('transfers', String(transfers))
+  }
+  if (player) {
+    params.set('player', player)
   }
   return `/?${params.toString()}`
 }

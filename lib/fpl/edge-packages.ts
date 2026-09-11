@@ -2,6 +2,8 @@ import 'server-only'
 
 import {
   disqualify,
+  GATE_CHECK_NAMES,
+  type GateName,
   runGates,
   sellCase,
   type CandidateInput,
@@ -430,12 +432,15 @@ export function buildEdge({
     }
   }
 
-  const moves = (n: number) => `${n} transfer${n === 1 ? '' : 's'}`
+  // Written out, not numeric: these are prose headings, and "2 transfers,
+  // safest" reads as a fragment where "Two transfers, safest" reads as a name.
+  const moves = (n: number) =>
+    `${titleCaseNumber(n)} transfer${n === 1 ? '' : 's'}`
   const packages = [
     build('all-safest', `${moves(spend)}, safest`, spend, safest),
     build(
       'all-ceiling',
-      `${moves(spend)}, highest ceiling`,
+      `${moves(spend)}, biggest upside`,
       spend,
       highestCeiling
     ),
@@ -640,10 +645,31 @@ function mixRejections(
   return [...leading, ...gates].slice(0, MAX_REJECTIONS)
 }
 
-function gateReason(gate: string): string {
-  if (gate === 'floor') return 'the floor test'
-  if (gate === 'money') return 'the value test'
-  return 'the would-pick-anyway test'
+/** One shared source for the check names, so badge and rejection agree. */
+function gateReason(gate: GateName): string {
+  return GATE_CHECK_NAMES[gate]
+}
+
+/** Small numbers read as words in a heading; beyond ten, digits are clearer. */
+export function spellNumber(value: number): string {
+  const words = [
+    'Zero',
+    'One',
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten',
+  ]
+  return words[value] ?? String(value)
+}
+
+function titleCaseNumber(value: number): string {
+  return spellNumber(value)
 }
 
 function signature(pack: EdgePackage): string {
@@ -735,4 +761,210 @@ function perNinety(total: string | number, minutes: number): number {
 
 function minutesRate(element: FplElement, matchesPlayed: number): number {
   return matchesPlayed <= 0 ? 0 : element.minutes / matchesPlayed
+}
+
+// ---------------------------------------------------------------------------
+// Best picks by position
+// ---------------------------------------------------------------------------
+
+/** How many to show per position. A goalkeeper choice is narrower than the rest. */
+const PICKS_PER_POSITION: Record<string, number> = {
+  GKP: 3,
+  DEF: 5,
+  MID: 5,
+  FWD: 5,
+}
+
+export type PositionPicks = {
+  position: string
+  players: PickRow[]
+}
+
+export type PickRow = EdgePlayer & {
+  /** One line on what this player would bring. */
+  benefit: string
+  /** Ownership across all FPL managers, for contrast with the scope figure. */
+  globalOwnership: number
+}
+
+/**
+ * The best available player in each position over the horizon, ignoring money.
+ *
+ * Deliberately **price agnostic**: this is a shortlist of who is worth having,
+ * not a list of who can be afforded today. The packages above already answer
+ * the affordability question, and answering it twice would hide the target a
+ * reader might sell two players to reach.
+ *
+ * Only players not already owned, because a suggestion to buy someone in the
+ * squad is not a suggestion. Availability, minutes and the obscurity rule
+ * still apply — an injured or fringe player is not a pick at any price.
+ */
+export function buildPositionPicks({
+  bootstrap,
+  fixtures,
+  squad,
+  startGameweek,
+  horizon,
+  longHorizon,
+  matchesPlayed,
+  ownershipOf,
+}: {
+  bootstrap: FplBootstrap
+  fixtures: FixtureIndex
+  squad: SquadPlayer[]
+  startGameweek: number
+  horizon: Horizon
+  longHorizon: number
+  matchesPlayed: Map<number, number>
+  ownershipOf: (playerId: number) => number
+}): PositionPicks[] {
+  const gameweeks = horizonGameweeks(startGameweek, horizon)
+  const longWeeks = horizonGameweeks(startGameweek, longHorizon as Horizon)
+  const positionOf = new Map(
+    bootstrap.element_types.map((type) => [type.id, type.singular_name_short])
+  )
+  const clubOf = new Map(bootstrap.teams.map((team) => [team.id, team]))
+  const owned = new Set(squad.map((player) => player.id))
+  const squadTeamIds = new Set(squad.map((player) => player.teamId))
+
+  const project = (element: FplElement, weeks: number[]) =>
+    projectPoints(
+      {
+        position: positionOf.get(element.element_type) ?? '?',
+        minutes: element.minutes,
+        matchesPlayed: matchesPlayed.get(element.team) ?? 0,
+        status: element.status,
+        chanceOfPlayingNextRound: element.chance_of_playing_next_round,
+        expectedGoalInvolvementsPer90: perNinety(
+          element.expected_goal_involvements,
+          element.minutes
+        ),
+        defensiveContributionPer90: element.defensive_contribution_per_90,
+      },
+      weeks.flatMap((gameweek) => fixturesFor(fixtures, element.team, gameweek))
+    ).points
+
+  const candidates = bootstrap.elements
+    .filter((element) => !owned.has(element.id))
+    .map((element) => ({
+      element,
+      position: positionOf.get(element.element_type) ?? '?',
+      projected: project(element, gameweeks),
+      projectedLong: project(element, longWeeks),
+      minutesPerMatch: minutesRate(
+        element,
+        matchesPlayed.get(element.team) ?? 0
+      ),
+      longHorizonPercentile: 0,
+    }))
+
+  fillPercentiles(candidates, positionOf)
+
+  const eligible = candidates.filter((candidate) => {
+    const blocked = disqualify(candidate, {
+      owned,
+      clubCounts: new Map(),
+      sellingTeamId: null,
+      // Price agnostic: the money checks are handed an unreachable budget so
+      // the availability, minutes and obscurity rules still run and the
+      // affordability one cannot fire.
+      fundsAvailable: Number.MAX_SAFE_INTEGER,
+      sellPrice: 0,
+    })
+    return blocked === null
+  })
+
+  return Object.entries(PICKS_PER_POSITION).map(([position, count]) => ({
+    position,
+    players: eligible
+      .filter((candidate) => candidate.position === position)
+      .sort((a, b) => b.projected - a.projected)
+      .slice(0, count)
+      .map((candidate) => {
+        const { element } = candidate
+        const club = clubOf.get(element.team)
+        const score = fixtureScore(
+          fixtures,
+          element.team,
+          startGameweek,
+          horizon
+        ).score
+        const row: PickRow = {
+          id: element.id,
+          name: element.web_name,
+          club: club?.name ?? '',
+          clubShort: club?.short_name ?? '',
+          teamId: element.team,
+          position: candidate.position,
+          price: element.now_cost,
+          projected: candidate.projected,
+          fixtureScore: score,
+          form: Number(element.form) || 0,
+          ownership: ownershipOf(element.id),
+          globalOwnership: Number(element.selected_by_percent) || 0,
+          netTransfers:
+            element.transfers_in_event - element.transfers_out_event,
+          conflicts: conflictsWith(
+            element.team,
+            squadTeamIds,
+            fixtures,
+            gameweeks.slice(0, 1),
+            clubOf
+          ),
+          benefit: '',
+        }
+        row.benefit = describeBenefit(row, candidate.longHorizonPercentile)
+        return row
+      }),
+  }))
+}
+
+/**
+ * Why this player is worth having, in one line.
+ *
+ * Names the single strongest thing about them rather than listing every
+ * figure, because the figures are already in the row beside it. A player
+ * suggested for fixtures should read differently from one suggested for form,
+ * which is the whole reason this sits next to the numbers rather than
+ * replacing them.
+ */
+function describeBenefit(row: PickRow, longPercentile: number): string {
+  const parts: string[] = []
+
+  if (row.fixtureScore >= 7) {
+    parts.push('one of the best fixture runs in the game right now')
+  } else if (row.fixtureScore <= 5) {
+    parts.push(
+      'a hard run, so this is a bet on the player rather than the draw'
+    )
+  }
+
+  if (row.form >= 6) {
+    parts.push(`in form at ${row.form.toFixed(1)} over the last 30 days`)
+  }
+
+  if (longPercentile >= 0.95) {
+    parts.push('among the very best of their position beyond this horizon')
+  }
+
+  if (row.netTransfers >= 100_000) {
+    parts.push(
+      `being bought by ${Math.round(row.netTransfers / 1000)}k managers this week`
+    )
+  } else if (row.netTransfers <= -100_000) {
+    parts.push(
+      `being sold by ${Math.round(Math.abs(row.netTransfers) / 1000)}k, so the market disagrees`
+    )
+  }
+
+  if (row.ownership < 5) {
+    parts.push('a differential at under 5% owned')
+  }
+
+  if (parts.length === 0) {
+    return `Projects ${row.projected.toFixed(1)} points over the horizon.`
+  }
+
+  const sentence = parts.slice(0, 2).join(', and ')
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1) + '.'
 }

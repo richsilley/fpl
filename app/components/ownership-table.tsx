@@ -122,6 +122,16 @@ export function OwnershipTable({
       <PopulationButton href={populationHref} label={reference.label} />
       <DirectionFlag reference={reference} />
 
+      {/* Every league and rival figure on this table is a snapshot taken at
+          the last deadline, because that is when `picks/` becomes readable
+          (constraint 3). Global mode reads a live percentage and needs no
+          caveat. */}
+      {reference.mode !== 'global' && (
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Rival and league squads are from the last deadline.
+        </p>
+      )}
+
       {reference.notice && (
         <p
           role="status"
@@ -420,7 +430,7 @@ function PlayerRow({
  * apart at a glance. Neither implies good or bad — that is the Flag column's
  * job, and it reverses with the direction flag.
  */
-const BAR_TONE = {
+export const BAR_TONE = {
   global: 'bg-slate-400/60 dark:bg-slate-400/40',
   league: 'bg-violet-400/60 dark:bg-violet-500/45',
 } as const
@@ -457,7 +467,13 @@ function Difference({ value }: { value: number | null }) {
  * to 100, not to the highest value in the squad, so the same player looks the
  * same in any squad and the reader is not misled by a relative scale.
  */
-function OwnershipBar({ percent, tone }: { percent: number; tone: string }) {
+export function OwnershipBar({
+  percent,
+  tone,
+}: {
+  percent: number
+  tone: string
+}) {
   return (
     <span className="flex items-center gap-2">
       <span className="w-12 shrink-0 text-right font-medium tabular-nums text-neutral-900 dark:text-neutral-100">

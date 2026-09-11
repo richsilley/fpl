@@ -57,10 +57,51 @@ const OBSCURITY_FORM_FLOOR = 3
 
 export type GateName = 'floor' | 'money' | 'anyway'
 
+/**
+ * The badge on a move. **Names the benefit, not the check.**
+ *
+ * A reader looking at a recommendation wants to know what it buys them, not
+ * which rule fired. "Raises the floor" was poker jargon for the worst
+ * realistic outcome, and nobody outside that world reads it that way. Two
+ * words each and parallel in shape, so three of them scan as a row rather
+ * than stopping the eye one at a time.
+ *
+ * The rule itself lives in `GATE_TOOLTIPS`, so the plain label and the exact
+ * threshold never have to compete for the same space.
+ */
 export const GATE_LABELS: Record<GateName, string> = {
-  floor: 'Raises the floor',
-  money: 'Money moves the right way',
-  anyway: 'Would be picked anyway',
+  floor: 'More points',
+  money: 'Better value',
+  anyway: 'Long-term pick',
+}
+
+/** What the badge is actually measuring, on hover. */
+export const GATE_TOOLTIPS: Record<GateName, string> = {
+  floor:
+    'Projected to score at least ' +
+    FLOOR_MARGIN_PER_GAMEWEEK +
+    ' points a gameweek more than the player going out.',
+  money:
+    'You are selling someone whose price is falling and buying someone rising or steady.',
+  anyway:
+    'Among the top quarter of their position over the next ' +
+    LONG_HORIZON +
+    ' gameweeks, not just the horizon you picked.',
+}
+
+/**
+ * The same three checks, named for the rejection sentence: "Fails the points
+ * check and the value check".
+ *
+ * These must stay in step with `GATE_LABELS`. The badge and the rejection used
+ * to carry different names for one rule, so a reader comparing the two saw
+ * "Money moves the right way" pass and "the value test" fail with no way to
+ * know they were the same thing.
+ */
+export const GATE_CHECK_NAMES: Record<GateName, string> = {
+  floor: 'the points check',
+  money: 'the value check',
+  anyway: 'the long-term check',
 }
 
 export type GateResult = {
@@ -70,7 +111,12 @@ export type GateResult = {
   qualifies: boolean
 }
 
-/** Why a candidate never reached the tests. One reason, the first that hit. */
+/**
+ * Why a candidate never reached the checks. One reason, the first that hit.
+ *
+ * The value is used to drop a candidate and never rendered, so there is no
+ * label map beside it. There was one, and it was six strings nothing read.
+ */
 export type Disqualifier =
   | 'minutes'
   | 'obscure'
@@ -78,15 +124,6 @@ export type Disqualifier =
   | 'club-limit'
   | 'unaffordable'
   | 'same-player'
-
-export const DISQUALIFIER_LABELS: Record<Disqualifier, string> = {
-  minutes: 'Not playing enough minutes',
-  obscure: 'Under 1% owned and out of form',
-  unavailable: 'Not available',
-  'club-limit': 'Would be a fourth from that club',
-  unaffordable: 'Cannot afford it with this sale',
-  'same-player': 'Already in the squad',
-}
 
 export type CandidateInput = {
   element: FplElement
@@ -239,8 +276,11 @@ export type SellReason = 'fixtures' | 'form' | 'price' | 'availability'
 
 export const SELL_REASON_LABELS: Record<SellReason, string> = {
   fixtures: 'Hard run of fixtures',
-  form: 'Out of form for the minutes played',
-  price: 'Falling price, being sold',
+  // The minutes qualifier is what stops a benched player tripping this. That
+  // is an implementation detail, and naming it asked the reader to hold a
+  // caveat that never changes their decision.
+  form: 'Out of form',
+  price: 'Losing value, being sold',
   availability: 'Fitness doubt',
 }
 

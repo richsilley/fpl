@@ -2,7 +2,7 @@
 
 # FPL Squad Matrix
 
-Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.30; v1 feature complete).
+Full requirements: [docs/FPL-Squad-Matrix-v1-Requirements.md](docs/FPL-Squad-Matrix-v1-Requirements.md) (v1.31; v1 feature complete).
 
 ## What this is
 
@@ -481,13 +481,31 @@ candidates become alternatives inside a package, not packages of their own.
 to pick — in a 0-0 both he and the owned defender bank a clean sheet, so they
 only pull apart on the attacking side.
 
-**Rejections are shown, conflicts first and capped at two.** A player who
-failed a test failed arithmetic anyone could repeat; one who passed every test
-and was still cut for a fixture clash is reasoning no other view could produce.
-Five of the rarer kind teaches nothing about the gate, so the list mixes both.
+**Badges name the benefit, not the check** — More points / Better value /
+Long-term pick. The rule with its threshold lives in `GATE_TOOLTIPS`, so the
+plain label and the exact number never compete for the same space.
+`GATE_CHECK_NAMES` carries the same three for the rejection sentence; badge and
+rejection used to give one rule two names.
 
-**Controls: transfers is primary, horizon and scope sit behind Advanced,
-difficulty is fixed to Form, risk is gone.** Difficulty × risk × horizon was
+**Rejections are gone.** They were interesting to whoever wrote the rules and
+confusing to everyone else. In their place, **best available by position** —
+three keepers, five of everything else, over the horizon, **price agnostic**
+and excluding players already owned. The packages answer what is affordable;
+this answers what is worth reaching for, which is the question that decides
+whether to sell two players to fund one. Each row carries a one-line benefit
+naming the strongest single thing about that player.
+
+**Any suggested player opens a detail panel** (`?player=<id>`, the same
+`Overlay` as every other), showing ownership with bars, the fixture matrix over
+the horizon, and the form figures. It reuses `FixtureCell`, `OwnershipBar` and
+the DefCon helpers rather than restating them, so a fixture cannot read amber
+on the Fixtures view and green here. Reachable from the picks list and from the
+incoming player in any package.
+
+**Controls, in order: scope, horizon, transfers.** Each narrows the question
+the next one answers, and all three stay visible — the horizon was briefly
+behind a disclosure, which hid the control that most changes what the
+suggestions are. Difficulty is fixed to Form and risk is gone. Difficulty × risk × horizon was
 fifty-odd combinations that barely moved the output. Risk was removed rather
 than demoted: the package axis already runs safest to highest ceiling, so a
 risk control would have been a second dial on the same thing.

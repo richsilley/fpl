@@ -84,34 +84,12 @@ export function TransfersSelector({
           )
         )}
       </span>
+      {/* "transfer(s)", not a pluralised word. The label sits beside a number
+          the reader is about to change, and a word that rewrites itself on
+          every click draws the eye away from the number that moved. */}
       <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
-        transfer{transfers === 1 ? '' : 's'}
+        transfer(s)
       </span>
     </div>
-  )
-}
-
-/**
- * Horizon and scope, folded away.
- *
- * Section 7.9: difficulty times risk times horizon was over fifty combinations
- * that barely changed the output. Difficulty is now fixed to Form — the gate
- * model reads fixtures through the projection, and offering three ratings for
- * a number the reader never sees was a control over nothing. Risk is gone
- * entirely; see the note in `page.tsx`.
- *
- * A `<details>` element rather than client state: it is a disclosure, the
- * browser has one, and it costs no JavaScript.
- */
-export function AdvancedControls({ children }: { children: React.ReactNode }) {
-  return (
-    <details className="rounded-lg border border-neutral-200 px-4 py-2 dark:border-neutral-800">
-      <summary className="cursor-pointer text-sm text-neutral-600 marker:text-neutral-400 dark:text-neutral-400">
-        Advanced
-      </summary>
-      <div className="flex flex-col gap-3 pb-2 pt-3 sm:flex-row sm:items-end sm:gap-6">
-        {children}
-      </div>
-    </details>
   )
 }

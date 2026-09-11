@@ -21,7 +21,6 @@ import { RatingToggle } from '@/app/components/rating-toggle'
 import { ReplacementPanel } from '@/app/components/replacement-panel'
 import { EdgeLists } from '@/app/components/edge-lists'
 import {
-  AdvancedControls,
   parseTransfers,
   TransfersSelector,
 } from '@/app/components/transfers-selector'
@@ -89,7 +88,8 @@ import {
 } from '@/lib/fpl/squad'
 import { remainingChips } from '@/lib/fpl/chips'
 import { LONG_HORIZON } from '@/lib/fpl/edge-gates'
-import { buildEdge } from '@/lib/fpl/edge-packages'
+import { buildEdge, buildPositionPicks } from '@/lib/fpl/edge-packages'
+import { PlayerDetail } from '@/app/components/player-detail'
 import { getEntryHistory } from '@/lib/fpl/api'
 import { loadMatrixData, type MatrixData } from '@/lib/fpl/views'
 import { getBootstrap } from '@/lib/fpl/api'
@@ -196,6 +196,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
   const dismissedStale = first(params.stale) === 'ok'
   const panel = parsePanel(first(params.panel))
   const transfers = parseTransfers(first(params.transfers))
+  const detailPlayer = parseEntityId(first(params.player))
   // An unparseable league or rival ID falls back to global rather than
   // erroring, per section 8.2.
   const ownershipMode = ownershipModeOf(
@@ -238,6 +239,7 @@ export default async function Page({ searchParams }: PageProps<'/'>) {
             asLeagueId={asLeagueId}
             rating={rating}
             transfers={transfers}
+            detailPlayer={detailPlayer}
             scratchPairs={scratchPairs}
             swapFor={swapFor}
             dismissedStale={dismissedStale}
@@ -264,6 +266,7 @@ async function MatrixSection({
   asLeagueId,
   rating,
   transfers,
+  detailPlayer,
   scratchPairs,
   swapFor,
   dismissedStale,
@@ -285,6 +288,8 @@ async function MatrixSection({
   /** Which fixture difficulty rating to score with (section 6.7). */
   rating: RatingSource
   transfers: number
+  /** Player whose detail panel is open (section 7.9). */
+  detailPlayer: number | null
   /** Modelled transfers, oldest first (section 7.7). */
   scratchPairs: ScratchPair[]
   /** Squad player whose replacement panel is open, if any. */
@@ -406,6 +411,10 @@ async function MatrixSection({
   // that closes it (section 7.8).
   const menuHref = buildHref({ ...base, ...carry, panel: 'menu' })
   const populationHref = buildHref({ ...base, ...carry, panel: 'population' })
+  // The player panel is URL state like every other overlay (section 7.8).
+  const detailHref = (playerId: number) =>
+    buildHref({ ...base, ...carry, player: String(playerId) })
+  const closeDetailHref = buildHref({ ...base, ...carry })
   const closeOverlayHref = buildHref({ ...base, ...carry })
   const backToMyTeamHref = buildHref({ ...base, ...withoutViewAs(carry) })
 
@@ -632,6 +641,7 @@ async function MatrixSection({
                           leagueId={leagueId}
                           rivalId={rivalId}
                           horizon={data.horizon}
+                          view={view}
                           sort={sort}
                           members={null}
                           carry={carry}
@@ -646,6 +656,7 @@ async function MatrixSection({
                         leagueId={leagueId}
                         rivalId={rivalId}
                         horizon={data.horizon}
+                        view={view}
                         sort={sort}
                         carry={carry}
                         closeHref={closeOverlayHref}
@@ -693,6 +704,7 @@ async function MatrixSection({
                           leagueId={leagueId}
                           rivalId={rivalId}
                           horizon={data.horizon}
+                          view={view}
                           sort={sort}
                           members={null}
                           carry={carry}
@@ -707,6 +719,7 @@ async function MatrixSection({
                         leagueId={leagueId}
                         rivalId={rivalId}
                         horizon={data.horizon}
+                        view={view}
                         sort={sort}
                         carry={carry}
                         closeHref={closeOverlayHref}
@@ -733,8 +746,24 @@ async function MatrixSection({
                   transfers={transfers}
                   swapHref={swapHref}
                   populationHref={populationHref}
+                  detailPlayer={detailPlayer}
+                  closeDetailHref={closeDetailHref}
+                  detailHref={detailHref}
                   transfersControl={
+                    // Scope, then horizon, then transfers: each narrows the
+                    // question the next one answers. All three stay visible —
+                    // the horizon was behind a disclosure, which hid the
+                    // control that most changes what the suggestions are.
                     <div className="space-y-3">
+                      <HorizonSelector
+                        key={`edge-${data.horizon}`}
+                        managerId={managerId}
+                        horizon={data.horizon}
+                        maxHorizon={data.maxHorizon}
+                        view={view}
+                        sort={rawSort}
+                        carry={carry}
+                      />
                       <TransfersSelector
                         managerId={managerId}
                         transfers={transfers}
@@ -743,20 +772,6 @@ async function MatrixSection({
                         sort={rawSort}
                         carry={carry}
                       />
-                      {/* Horizon and scope change the ordering; transfers
-                          changes the shape of the answer. Only the one that
-                          reshapes it earns a place above the packages. */}
-                      <AdvancedControls>
-                        <HorizonSelector
-                          key={`edge-${data.horizon}`}
-                          managerId={managerId}
-                          horizon={data.horizon}
-                          maxHorizon={data.maxHorizon}
-                          view={view}
-                          sort={rawSort}
-                          carry={carry}
-                        />
-                      </AdvancedControls>
                     </div>
                   }
                 />
@@ -1002,6 +1017,7 @@ async function ModeSelectorSection({
   leagueId,
   rivalId,
   horizon,
+  view,
   sort,
   carry,
   closeHref,
@@ -1012,6 +1028,8 @@ async function ModeSelectorSection({
   leagueId: number | null
   rivalId: number | null
   horizon: Horizon
+  /** Carried so the picker returns to the view it was opened from. */
+  view: ViewId
   sort: ClubSort
   carry: CarriedState
   closeHref: string
@@ -1028,6 +1046,7 @@ async function ModeSelectorSection({
   return (
     <OwnershipModeSelector
       managerId={managerId}
+      view={view}
       manager={manager}
       mode={mode}
       leagueId={leagueId}
@@ -1344,6 +1363,9 @@ async function EdgeSection({
   leagueId,
   rivalId,
   transfers,
+  detailPlayer,
+  detailHref,
+  closeDetailHref,
   swapHref,
   populationHref,
   transfersControl,
@@ -1356,6 +1378,10 @@ async function EdgeSection({
   leagueId: number | null
   rivalId: number | null
   transfers: number
+  /** Player whose detail panel is open (section 7.9). */
+  detailPlayer: number | null
+  detailHref: (playerId: number) => string
+  closeDetailHref: string
   swapHref: (playerId: number) => string
   populationHref: string
   transfersControl: React.ReactNode
@@ -1405,17 +1431,58 @@ async function EdgeSection({
     transfers,
   })
 
-  const gameweeks = horizonGameweeks(data.startGameweek, data.horizon).length
+  const picks = buildPositionPicks({
+    bootstrap,
+    fixtures: data.fixtures,
+    squad: players,
+    startGameweek: data.startGameweek,
+    horizon: data.horizon,
+    longHorizon: LONG_HORIZON,
+    matchesPlayed: data.matchesPlayed,
+    ownershipOf: reference.ownershipOf,
+  })
+
+  const weeks = horizonGameweeks(data.startGameweek, data.horizon)
+  const open =
+    detailPlayer === null
+      ? null
+      : bootstrap.elements.find((element) => element.id === detailPlayer)
 
   return (
     <div className="space-y-4">
       <PopulationButton href={populationHref} label={reference.label} />
+
+      {/* The same floating panel as every other overlay (section 7.8), so it
+          dismisses on Escape and on the backdrop like the rest. */}
+      {open && (
+        <Overlay closeHref={closeDetailHref} label={open.web_name}>
+          <PlayerDetail
+            element={open}
+            club={bootstrap.teams.find((team) => team.id === open.team)}
+            position={
+              bootstrap.element_types.find(
+                (type) => type.id === open.element_type
+              )?.singular_name_short ?? '?'
+            }
+            fixtures={data.fixtures}
+            gameweeks={weeks}
+            globalOwnership={Number(open.selected_by_percent) || 0}
+            scopeOwnership={reference.ownershipOf(open.id)}
+            scopeLabel={reference.label}
+            matchesPlayed={data.matchesPlayed.get(open.team) ?? 0}
+          />
+        </Overlay>
+      )}
+
       <EdgeLists
         result={result}
+        picks={picks}
         chips={chips}
         rivalName={mode === 'rival' ? reference.label : null}
         swapHref={swapHref}
-        horizonGameweeks={gameweeks}
+        detailHref={detailHref}
+        horizonGameweeks={weeks.length}
+        scopeLabel={reference.label}
         transfersControl={transfersControl}
       />
     </div>
