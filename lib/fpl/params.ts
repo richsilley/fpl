@@ -204,6 +204,7 @@ export type FormSortField =
   | 'xgi'
   | 'defcon'
   | 'xp'
+  | 'market'
 
 /** Squad order, the default: starting XI then bench, as section 7.1 loads it. */
 export const DEFAULT_FORM_SORT = 'squad' as const
@@ -222,6 +223,7 @@ const SORTABLE_FORM_FIELDS: Exclude<FormSortField, 'squad'>[] = [
   'xgi',
   'defcon',
   'xp',
+  'market',
 ]
 
 export function parseFormSort(value: string | undefined): FormSort {

@@ -68,3 +68,34 @@ export function formatPriceChange(tenths: number): string {
   const sign = tenths > 0 ? '+' : '−'
   return `${sign}${Math.abs(tenths / 10).toFixed(1)}`
 }
+
+/**
+ * Net transfers this gameweek, in words rather than as a signed number.
+ *
+ * "Market +345k" did not say what was being counted; "345k buying" needs no
+ * tooltip. Rounded to thousands because the magnitude is the whole signal —
+ * whether a quarter of a million managers are moving, not whether it is
+ * 345,102 or 345,098.
+ *
+ * Shared by the Form and Ownership tables and The Edge, so one movement cannot
+ * be described three different ways.
+ */
+export function formatNetTransfers(net: number): string {
+  if (net === 0) {
+    return 'level'
+  }
+  const magnitude = Math.abs(net)
+  const rounded =
+    magnitude >= 1000 ? `${Math.round(magnitude / 1000)}k` : String(magnitude)
+  return net > 0 ? `${rounded} buying` : `${rounded} selling`
+}
+
+/** Green when the market is buying, red when selling. Matches section 6.4. */
+export function netTransferTone(net: number): string {
+  if (net === 0) {
+    return 'text-neutral-400 dark:text-neutral-500'
+  }
+  return net > 0
+    ? 'text-emerald-700 dark:text-emerald-400'
+    : 'text-rose-700 dark:text-rose-400'
+}

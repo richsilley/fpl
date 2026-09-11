@@ -46,6 +46,12 @@ export function FormLegend() {
           Fantasy Premier League&rsquo;s own expected points for the next
           gameweek.
         </Entry>
+        <Entry term="Market">
+          how many managers have bought this player this gameweek, less how many
+          have sold. Green is the market buying, red the market selling. It is
+          the only column here that measures opinion rather than something that
+          has happened on a pitch.
+        </Entry>
       </dl>
     </div>
   )

@@ -16,6 +16,7 @@ import {
 } from '@/lib/fpl/ownership'
 import type { ReferencePopulation } from '@/lib/fpl/reference'
 import type { SquadPlayer } from '@/lib/fpl/squad'
+import { formatNetTransfers, netTransferTone } from '@/lib/format'
 
 /**
  * View 3, Ownership (section 7.4).
@@ -66,6 +67,8 @@ const PLAYER_COLUMN = MATRIX_PLAYER_COLUMN
 const PERCENT_COLUMN = 'w-56 min-w-56'
 const NUMERIC_COLUMN = 'w-20 min-w-20'
 const BAND_COLUMN = 'w-32 min-w-32'
+/** Wide enough for "345k selling" without wrapping. */
+const MARKET_COLUMN = 'w-28 min-w-28'
 
 /**
  * One row's figures, gathered across up to three populations.
@@ -110,8 +113,11 @@ export function OwnershipTable({
   const showLeague = leagueLabel !== null
   const showRival = rivalLabel !== null
   const showDifference = showLeague || showRival
+  // Player, Global, Flag, Market are always present; the rest appear per mode.
+  // Plus one for the trailing spacer column, or the Bench band stops short of
+  // the table edge instead of ruling right across it as it does on Form.
   const columnCount =
-    3 + (showLeague ? 1 : 0) + (showRival ? 1 : 0) + (showDifference ? 1 : 0)
+    5 + (showLeague ? 1 : 0) + (showRival ? 1 : 0) + (showDifference ? 1 : 0)
 
   return (
     <div className="space-y-4">
@@ -199,6 +205,15 @@ export function OwnershipTable({
                 title="Ownership band, coloured by whether it helps or hurts your current position."
               >
                 Flag
+              </HeaderCell>
+              {/* Last. Every other column on this table is a snapshot of who
+                  owns the player now; this is the only one that says which way
+                  that number is about to move. */}
+              <HeaderCell
+                className={MARKET_COLUMN}
+                title="Net transfers across every FPL manager this gameweek: transfers in minus transfers out."
+              >
+                Market
               </HeaderCell>
 
               <th
@@ -413,6 +428,16 @@ function PlayerRow({
       >
         <span className={dim}>
           <BandChip id={band.id} label={band.label} position={position} />
+        </span>
+      </td>
+
+      <td
+        className={`border-b border-l border-neutral-100 px-2 py-1.5 text-center tabular-nums dark:border-neutral-800/70 ${rowBackground} ${MARKET_COLUMN}`}
+      >
+        <span
+          className={`${dim} ${netTransferTone(row.player.netTransfers)}`}
+        >
+          {formatNetTransfers(row.player.netTransfers)}
         </span>
       </td>
 
@@ -666,6 +691,15 @@ function BandKey({ position }: { position: FieldPosition }) {
             )}
           </>
         )}
+      </p>
+
+      {/* Last, because it is the last column, and after the flag paragraph so
+          that paragraph stays next to the flags it explains. */}
+      <p className="max-w-prose">
+        <Term>Market</Term> how many managers have bought this player this
+        gameweek, less how many have sold. Green is the market buying, red the
+        market selling. It says where ownership is heading, while the other
+        columns say where it stands.
       </p>
     </div>
   )

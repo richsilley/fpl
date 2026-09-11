@@ -2,7 +2,7 @@ import { FixtureCell, scoreTone } from '@/app/components/fixture-visuals'
 import { BAR_TONE, OwnershipBar } from '@/app/components/ownership-table'
 import { defconThreshold, formatDefcon } from '@/lib/fpl/defcon'
 import { fixturesFor, type FixtureIndex } from '@/lib/fpl/fixtures'
-import { formatPrice } from '@/lib/format'
+import { formatNetTransfers, formatPrice } from '@/lib/format'
 import type { FplElement, FplTeam } from '@/lib/fpl/types'
 
 /**
@@ -158,7 +158,7 @@ export function PlayerDetail({
             <Stat label="xP" value={String(element.ep_next)} />
             <Stat
               label="Market"
-              value={formatNet(
+              value={formatNetTransfers(
                 element.transfers_in_event - element.transfers_out_event
               )}
             />
@@ -214,17 +214,6 @@ function formatChange(tenths: number): string {
     return '—'
   }
   return `${tenths > 0 ? '+' : '−'}£${Math.abs(tenths / 10).toFixed(1)}m`
-}
-
-/** Plain words, not a signed number beside the label "Market". */
-function formatNet(net: number): string {
-  const magnitude = Math.abs(net)
-  const rounded =
-    magnitude >= 1000 ? `${Math.round(magnitude / 1000)}k` : String(magnitude)
-  if (net === 0) {
-    return 'level'
-  }
-  return net > 0 ? `${rounded} buying` : `${rounded} selling`
 }
 
 export { scoreTone }

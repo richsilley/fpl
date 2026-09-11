@@ -60,6 +60,14 @@ export type SquadPlayer = {
    * The global reference population for the Ownership view (section 7.4).
    */
   selectedByPercent: string
+  /**
+   * Net transfers across every FPL manager this gameweek, in minus out.
+   *
+   * The market's own opinion, and the only figure on these tables that is not
+   * derived from something that has already happened on a pitch. Positive is
+   * the market buying.
+   */
+  netTransfers: number
   /** 1 to 15. 1 to 11 start, 12 to 15 are the bench in order. */
   squadPosition: number
   isCaptain: boolean
@@ -272,6 +280,7 @@ function toSquadPlayer(
     defensiveContributionPer90: element.defensive_contribution_per_90,
     expectedPointsNext: parseExpectedPoints(element.ep_next),
     selectedByPercent: element.selected_by_percent,
+    netTransfers: element.transfers_in_event - element.transfers_out_event,
     squadPosition: pick.position,
     isCaptain: pick.is_captain,
     isViceCaptain: pick.is_vice_captain,

@@ -18,7 +18,13 @@ import {
   type FormSortField,
 } from '@/lib/fpl/params'
 import type { Squad, SquadPlayer } from '@/lib/fpl/squad'
-import { formatPoints, formatPrice, formatPriceChange } from '@/lib/format'
+import {
+  formatNetTransfers,
+  formatPoints,
+  formatPrice,
+  formatPriceChange,
+  netTransferTone,
+} from '@/lib/format'
 
 /**
  * View 2, Form (section 7.3). Spot who is delivering and who is on the decline.
@@ -54,6 +60,8 @@ const TIGHT_COLUMN = 'w-12 min-w-12'
 const SEASON_COLUMN = 'w-[4.75rem] min-w-[4.75rem]'
 /** Sized to its own header: "Mins" is wider than the two digits under it. */
 const MINS_COLUMN = 'w-14 min-w-14'
+/** Wide enough for "345k selling" without wrapping. */
+const MARKET_COLUMN = 'w-28 min-w-28'
 // Wider than they were: a bar needs room before a high value and a low one
 // look different at a glance, which is the only reason the bars exist.
 const BAR_COLUMN = 'w-28 min-w-28'
@@ -233,6 +241,19 @@ export function FormTable({
             >
               xP
             </SortableHeader>
+            {/* Last, and the only column on the table that is not about what
+                the player has done. It is what ten million managers think is
+                about to happen, which is a different kind of evidence and
+                belongs at the end rather than mixed in with the measurements. */}
+            <SortableHeader
+              href={sortHref('market')}
+              active={active.field === 'market'}
+              descending={active.descending}
+              className={`border-l border-l-neutral-200 dark:border-l-neutral-700 ${MARKET_COLUMN}`}
+              title="Net transfers across every FPL manager this gameweek: transfers in minus transfers out"
+            >
+              Market
+            </SortableHeader>
 
             {/* Absorbs the leftover width, exactly as the Fixtures table does.
                 The table is `w-full` so that it starts and ends where Fixtures
@@ -261,7 +282,7 @@ export function FormTable({
           <tr>
             <th
               scope="colgroup"
-              colSpan={12}
+              colSpan={13}
               className="sticky left-0 border-y border-neutral-200 bg-neutral-100 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/70 dark:text-neutral-400"
             >
               Bench
@@ -346,6 +367,8 @@ function sortValue(
       return player.defensiveContributionPer90
     case 'xp':
       return player.expectedPointsNext
+    case 'market':
+      return player.netTransfers
     default:
       return player.squadPosition
   }
@@ -512,6 +535,11 @@ function PlayerRow({
         edgeLeft
       >
         {player.expectedPointsNext.toFixed(1)}
+      </NumericCell>
+      <NumericCell background={rowBackground} width={MARKET_COLUMN} edgeLeft>
+        <span className={netTransferTone(player.netTransfers)}>
+          {formatNetTransfers(player.netTransfers)}
+        </span>
       </NumericCell>
 
       {/* Matches the spacer in the header. */}

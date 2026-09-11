@@ -304,7 +304,7 @@ load-bearing:
 |---|---|
 | `client.ts` | the single egress point: user-agent, timeout, cache config, error mapping |
 | `api.ts` | one function per endpoint + cache durations |
-| `projection.ts` | trims bootstrap to the 22 fields (§5.3) |
+| `projection.ts` | trims bootstrap to the 25 fields (§5.3) |
 | `squad.ts` | `loadSquad()` → the fifteen-row set |
 | `views.ts` | `loadMatrixData()` → what every view is built from |
 | `fixtures.ts` | fixture index + Fixture Score |
@@ -323,7 +323,7 @@ load-bearing:
 | `difficulty.ts` | the three difficulty modes + Team Strength (§6.7) |
 | `scratch.ts` | the scratch-squad diff, budget and warnings (§7.7) |
 | `availability.ts` | status-code mapping |
-| `lib/format.ts` | price, rank, points |
+| `lib/format.ts` | price, rank, points, net transfers |
 
 Two Client Components import `params.ts`/`horizon.ts`: the horizon control and
 `auto-submit-select.tsx`. **Adding `import 'server-only'` to anything in the
@@ -541,8 +541,18 @@ Rows are the 15 players except where noted.
    strength.
 2. **Form** — spot who's delivering and who's on the decline. **Built,
    redesigned §7.3.1.** Columns in order: price, GW change, season change, pts,
-   PPG, **mins**, form, xGI, DefCon, **xP**. (No xG/xA, no Status/News columns —
-   those were removed.)
+   PPG, **mins**, form, xGI, DefCon, **xP**, **Market**. (No xG/xA, no
+   Status/News columns — those were removed.)
+
+   **Market is net transfers this gameweek**, `transfers_in_event -
+   transfers_out_event`, worded rather than printed raw: "311k buying", "72k
+   selling", "level". It is last on Form, last on Ownership, and a Stat in the
+   player detail panel, and all three render it through
+   `formatNetTransfers`/`netTransferTone` in `lib/format.ts` — three surfaces
+   wording the same figure differently is how they start disagreeing. Green is
+   buying, red is selling, per §6.4. It sits at the end because it is the only
+   column on either table that measures opinion rather than something that has
+   already happened on a pitch.
 
    **Plain figures, then bars.** Pts/PPG/Mins are read one row at a time; the
    four bar columns are read down, comparing players. Keeping the two kinds
@@ -607,9 +617,9 @@ Rows are the 15 players except where noted.
    never asks which mode it's in. Only `ownershipOf` differs. **Add a fourth
    population by writing a loader, not by branching the function.**
 
-   **Columns appear per mode; they are not dashed.** global → Global, Flag.
-   league → Global, League, Diff, Flag. rival → Global, League, Rival, Diff,
-   Flag. An earlier version kept all six always and dashed the unused ones to
+   **Columns appear per mode; they are not dashed.** global → Global, Flag,
+   Market. league → Global, League, Diff, Flag, Market. rival → Global, League,
+   Rival, Diff, Flag, Market. An earlier version kept all six always and dashed the unused ones to
    stop the table reflowing; that traded a reflow for four dead columns on the
    view most people open first. The frozen player column is pinned by the
    shared `table-metrics` width, so the part that must not move does not.

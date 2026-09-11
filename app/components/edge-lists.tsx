@@ -14,7 +14,11 @@ import type {
   PositionPicks,
 } from '@/lib/fpl/edge-packages'
 import { spellNumber } from '@/lib/fpl/edge-packages'
-import { formatPrice } from '@/lib/format'
+import {
+  formatNetTransfers,
+  formatPrice,
+  netTransferTone,
+} from '@/lib/format'
 
 /**
  * The Edge (section 7.9): complete transfer packages.
@@ -327,13 +331,9 @@ function MoveRow({
         {/* "Market +345k" did not say what was being counted. The plain form
             needs no tooltip at all. */}
         <span
-          className={
-            move.in.netTransfers > 0
-              ? 'text-emerald-700 dark:text-emerald-400'
-              : 'text-rose-700 dark:text-rose-400'
-          }
+          className={netTransferTone(move.in.netTransfers)}
         >
-          {formatNet(move.in.netTransfers)}
+          {formatNetTransfers(move.in.netTransfers)}
         </span>
       </div>
 
@@ -344,17 +344,6 @@ function MoveRow({
       )}
     </li>
   )
-}
-
-/** Net transfers in words: what is happening, not a signed number. */
-function formatNet(net: number): string {
-  const magnitude = Math.abs(net)
-  const rounded =
-    magnitude >= 1000 ? `${Math.round(magnitude / 1000)}k` : String(magnitude)
-  if (net === 0) {
-    return 'Market level'
-  }
-  return net > 0 ? `${rounded} buying` : `${rounded} selling`
 }
 
 /**
